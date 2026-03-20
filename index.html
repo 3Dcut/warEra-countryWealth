@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WarEra Country Wealth Dashboard</title>
+    <!-- Modern Font: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app" class="app-container">
+      
+      <!-- Premium Header -->
+      <header class="glass-panel main-header">
+        <div class="header-titles">
+          <h1>WarEra <span class="accent-text">Wealth Dashboard</span></h1>
+          <p class="subtitle">Real-time Liquid Assets Tracker for Countries & Citizens</p>
+        </div>
+        
+        <div class="controls-panel">
+          <div class="input-group">
+            <label for="countryId">Country ID</label>
+            <input type="text" id="countryId" value="6813b6d446e731854c7ac79c" placeholder="e.g. 6813...">
+          </div>
+          <div class="input-group">
+            <label for="apiKey">API Key (Optional)</label>
+            <input type="password" id="apiKey" placeholder="Leave empty for public limits">
+          </div>
+          <button id="startBtn" class="primary-btn">Start Scan</button>
+        </div>
+      </header>
+
+      <!-- Dashboard Stats -->
+      <section class="stats-grid">
+        <div class="stat-card glass-panel">
+          <h3>State Treasury</h3>
+          <div class="stat-value" id="treasuryValue">--- $</div>
+        </div>
+        <div class="stat-card glass-panel">
+          <h3>Total Citizens</h3>
+          <div class="stat-value" id="citizensCount">---</div>
+        </div>
+        <div class="stat-card glass-panel">
+          <h3>Scan Progress</h3>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="scanProgress" style="width: 0%"></div>
+          </div>
+          <div class="progress-text" id="scanText">0 / 0</div>
+        </div>
+      </section>
+
+      <!-- Logging & Main Data Area -->
+      <section class="data-section glass-panel">
+        <div class="section-header">
+          <h2>Citizens Liquid Assets</h2>
+          <span class="badge" id="scanStatusBadge">Idle</span>
+        </div>
+        
+        <div class="table-container">
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th>Citizen</th>
+                <th>Total Wealth (Ranking)</th>
+                <th>Companies Value</th>
+                <th>Liquid Assets (Cash+Items)</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+              <!-- Rendered via TS -->
+              <tr class="empty-row"><td colspan="4">Enter a Country ID and click Start Scan</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
