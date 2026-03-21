@@ -115,6 +115,8 @@ body {
   gap: 2rem;
   align-items: center;
   text-align: center;
+  position: relative;
+  z-index: 50; /* Ensure header elements stay above the rest of the page */
 }
 .header-titles h1 {
   font-family: var(--font-display);
@@ -199,6 +201,7 @@ input:focus {
   box-shadow: 0 10px 40px rgba(0,0,0,0.8);
   scrollbar-width: thin;
   scrollbar-color: var(--accent-base) transparent;
+  overscroll-behavior: contain; /* Prevent scrolling the page when scrolling the dropdown */
 }
 .autocomplete-dropdown::-webkit-scrollbar {
   width: 6px;
