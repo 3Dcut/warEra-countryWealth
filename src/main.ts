@@ -28,18 +28,18 @@ api = new WarEraAPI();
 // Initialize App
 async function init() {
   countrySearchInput.disabled = true;
-  countrySearchInput.placeholder = "Loading countries...";
+  countrySearchInput.placeholder = "Lade Länder...";
   
   try {
     const data = await api.getAllCountries();
     if (Array.isArray(data)) {
       countries = data.sort((a, b) => a.name.localeCompare(b.name));
     }
-    countrySearchInput.placeholder = "Type a country name...";
+    countrySearchInput.placeholder = "Ländernamen eingeben...";
     countrySearchInput.disabled = false;
   } catch (err) {
-    console.error("Failed to load countries", err);
-    countrySearchInput.placeholder = "Error loading countries. Enter ID manually.";
+    console.error("Fehler beim Laden der Länder", err);
+    countrySearchInput.placeholder = "Fehler beim Laden. Land-ID manuell eingeben.";
     countrySearchInput.disabled = false;
     // We can fallback to manual ID entry if autocomplete fails
     setupManualFallback();
@@ -52,7 +52,7 @@ init();
 function renderDropdown(filtered: any[]) {
   countryDropdown.innerHTML = '';
   if (filtered.length === 0) {
-    countryDropdown.innerHTML = '<div class="dropdown-item empty">No countries found</div>';
+    countryDropdown.innerHTML = '<div class="dropdown-item empty">Keine Länder gefunden</div>';
     countryDropdown.classList.remove('hidden');
     return;
   }
@@ -77,7 +77,7 @@ function selectCountry(country: any) {
   countryIdHidden.value = country._id;
   countryDropdown.classList.add('hidden');
   startBtn.disabled = false;
-  btnText.innerText = 'Start Scan';
+  btnText.innerText = 'Scan starten';
   startBtn.classList.add('ready');
 }
 
@@ -87,11 +87,11 @@ function setupManualFallback() {
     countryIdHidden.value = countrySearchInput.value.trim();
     if (countryIdHidden.value) {
       startBtn.disabled = false;
-      btnText.innerText = 'Start Scan';
+      btnText.innerText = 'Scan starten';
       startBtn.classList.add('ready');
     } else {
       startBtn.disabled = true;
-      btnText.innerText = 'Select Country';
+      btnText.innerText = 'Land auswählen';
       startBtn.classList.remove('ready');
     }
   });
@@ -104,7 +104,7 @@ countrySearchInput.addEventListener('input', (e) => {
     countryDropdown.classList.add('hidden');
     countryIdHidden.value = '';
     startBtn.disabled = true;
-    btnText.innerText = 'Select Country';
+    btnText.innerText = 'Land auswählen';
     startBtn.classList.remove('ready');
     return;
   }
@@ -135,27 +135,30 @@ countrySearchInput.addEventListener('focus', () => {
 startBtn.addEventListener('click', async () => {
   if (isScanning) return;
   const countryId = countryIdHidden.value.trim();
-  if (!countryId) return alert('Please select a country from the list or enter a valid ID.');
+  if (!countryId) return alert('Bitte wähle ein Land aus der Liste oder gib eine gültige ID ein.');
 
   isScanning = true;
   startBtn.disabled = true;
   startBtn.classList.remove('ready');
-  btnText.innerText = 'Scanning...';
+  btnText.innerText = 'Scanne...';
   
-  scanStatusBadge.innerText = 'Scanning';
+  scanStatusBadge.innerText = 'Scanne';
   scanStatusBadge.className = 'status-label text-warning';
   statusDot.className = 'status-dot warning inner-glow glow-pulse';
   
   resultsBody.innerHTML = '';
   
   scanProgressEl.style.width = '0%';
-  scanTextEl.innerText = 'Initializing Secure Connection...';
+  scanTextEl.innerText = 'Initialisiere sichere Verbindung...';
 
   api = new WarEraAPI(apiKeyInput.value.trim());
+  api.onRateLimit = (ms) => {
+    scanTextEl.innerText = `API-Limit erreicht. Warte ${Math.round(ms / 1000)} Sekunden...`;
+  };
 
   try {
     // 1. Fetch Country Treasury
-    scanTextEl.innerText = 'Accessing State Treasury...';
+    scanTextEl.innerText = 'Greife auf Staatskasse zu...';
     let countryData = await api.getCountry(countryId);
     if (countryData?.result?.data) {
       countryData = countryData.result.data;
@@ -164,14 +167,14 @@ startBtn.addEventListener('click', async () => {
     }
 
     if (!countryData || typeof countryData.money === 'undefined') {
-      throw new Error(`Connection refused. Invalid ID or API constraints.`);
+      throw new Error(`Verbindung abgelehnt. Ungültige ID oder API-Beschränkung.`);
     }
 
     const treasury = countryData.money || 0;
-    treasuryValueEl.innerHTML = `<span class="currency-symbol">$</span>${treasury.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    treasuryValueEl.innerHTML = `<span class="currency-symbol">🪙</span>${treasury.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
     // 2. Fetch All Citizens
-    scanTextEl.innerText = 'Compiling Citizen Ledger...';
+    scanTextEl.innerText = 'Erstelle Bürger-Register...';
     let citizens: any[] = [];
     let cursor = undefined;
     
@@ -188,7 +191,7 @@ startBtn.addEventListener('click', async () => {
     citizensCountEl.innerText = citizens.length.toLocaleString();
     
     if (citizens.length === 0) {
-      scanTextEl.innerText = 'No citizens records found in registry.';
+      scanTextEl.innerText = 'Keine Bürger-Einträge im Register gefunden.';
       finishScan();
       return;
     }
@@ -197,9 +200,9 @@ startBtn.addEventListener('click', async () => {
     for (let i = 0; i < citizens.length; i++) {
       const citizen = citizens[i];
       const citizenId = citizen._id || citizen;
-      let username = citizen.username || 'Encrypted Identity';
+      let username = citizen.username || 'Verschlüsselte Identität';
 
-      scanTextEl.innerText = `Analyzing Citizen ${i+1}/${citizens.length}`;
+      scanTextEl.innerText = `Analysiere Bürger ${i+1}/${citizens.length}`;
       scanProgressEl.style.width = `${((i+1)/citizens.length)*100}%`;
 
       try {
@@ -242,9 +245,9 @@ startBtn.addEventListener('click', async () => {
               </div>
             </div>
           </td>
-          <td class="wealth-col font-mono">$${totalWealth.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-          <td class="wealth-col font-mono text-muted">$${totalCompanyValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-          <td class="wealth-col font-mono ${liquidClass} fw-bold">$${liquidAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td class="wealth-col font-mono">🪙 ${totalWealth.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td class="wealth-col font-mono text-muted">🪙 ${totalCompanyValue.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td class="wealth-col font-mono ${liquidClass} fw-bold">🪙 ${liquidAssets.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
         `;
         resultsBody.appendChild(tr);
 
@@ -259,19 +262,19 @@ startBtn.addEventListener('click', async () => {
               <div><strong>${username}</strong></div>
             </div>
           </td>
-          <td colspan="3" class="text-danger">Extraction Failed: Data Encrypted</td>
+          <td colspan="3" class="text-danger">Extraktion fehlgeschlagen: Daten verschlüsselt</td>
         `;
         resultsBody.appendChild(tr);
       }
     }
 
-    scanTextEl.innerText = `Scan Complete: ${citizens.length.toLocaleString()} identities deciphered.`;
+    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt.`;
     finishScan(true);
 
   } catch (err: any) {
     console.error(err);
     alert(err.message);
-    scanTextEl.innerText = 'System Failure: Scan Aborted.';
+    scanTextEl.innerText = 'Systemfehler: Scan abgebrochen.';
     finishScan(false);
   }
 });
@@ -280,14 +283,14 @@ function finishScan(success: boolean = false) {
   isScanning = false;
   startBtn.disabled = false;
   startBtn.classList.add('ready');
-  btnText.innerText = 'Rescan Country';
+  btnText.innerText = 'Land erneut scannen';
   
   if (success) {
-    scanStatusBadge.innerText = 'Active';
+    scanStatusBadge.innerText = 'Aktiv';
     scanStatusBadge.className = 'status-label text-success';
     statusDot.className = 'status-dot success inner-glow glow-pulse';
   } else {
-    scanStatusBadge.innerText = 'Idle / Error';
+    scanStatusBadge.innerText = 'Bereit / Fehler';
     scanStatusBadge.className = 'status-label text-muted';
     statusDot.className = 'status-dot idle inner-glow';
   }

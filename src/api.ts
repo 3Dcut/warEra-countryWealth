@@ -2,34 +2,17 @@ const BASE_URL = "https://api2.warera.io/trpc";
 
 export class WarEraAPI {
   private apiKey: string = "";
-  
-  // Rate limiting properties
-  private requestDelayMs: number = 200;
-  private lastRequestTime: number = 0;
+  public onRateLimit?: (ms: number) => void;
 
   constructor(apiKey: string = "") {
     this.apiKey = apiKey;
-    if (!this.apiKey) {
-      // Slower delay when no token is used to avoid 429
-      this.requestDelayMs = 1500;
-    }
   }
 
   private async sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private async rateLimit() {
-    const now = Date.now();
-    const timeSinceLast = now - this.lastRequestTime;
-    if (timeSinceLast < this.requestDelayMs) {
-      await this.sleep(this.requestDelayMs - timeSinceLast);
-    }
-    this.lastRequestTime = Date.now();
-  }
-
   private async fetchAPI(endpoint: string, inputParams: any = null, retries = 3): Promise<any> {
-    await this.rateLimit();
     
     let url = `${BASE_URL}/${endpoint}`;
     if (inputParams) {
@@ -51,10 +34,22 @@ export class WarEraAPI {
       if (response.status === 429) {
         if (retries > 0) {
           console.warn(`429 Too Many Requests for ${endpoint}. Waiting...`);
-          await this.sleep(5000); // Wait 5 seconds on 429
+          
+          let waitTime = 5000;
+          const retryAfterStr = response.headers.get('Retry-After');
+          if (retryAfterStr) {
+            const parsed = parseInt(retryAfterStr, 10);
+            if (!isNaN(parsed)) waitTime = parsed * 1000;
+          }
+
+          if (this.onRateLimit) {
+            this.onRateLimit(waitTime);
+          }
+
+          await this.sleep(waitTime);
           return this.fetchAPI(endpoint, inputParams, retries - 1);
         }
-        throw new Error("Rate limit exceeded persistently.");
+        throw new Error("Ratenlimit dauerhaft überschritten. Bitte API-Key verwenden oder später versuchen.");
       }
       
       if (!response.ok) {

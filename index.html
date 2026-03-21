@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WarEra Wealth Analytics</title>
+    <title>WarEra Vermögens-Analyse</title>
     <!-- Premium Fonts: Outfit for Display, Inter for Body -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,26 +19,26 @@
       <!-- Premium Header -->
       <header class="glass-panel main-header slide-in">
         <div class="header-titles">
-          <h1>WarEra <span class="accent-text">Wealth Analytics</span></h1>
-          <p class="subtitle">Global economic intelligence & citizen asset tracking</p>
+          <h1>WarEra <span class="accent-text">Vermögens-Analyse</span></h1>
+          <p class="subtitle">Globale Wirtschaftsdaten & Bürger-Vermögensverfolgung</p>
         </div>
         
         <div class="controls-panel">
           <div class="input-group search-group">
-            <label for="countrySearch">Country</label>
+            <label for="countrySearch">Land</label>
             <div class="autocomplete-wrapper">
-              <input type="text" id="countrySearch" placeholder="Type a country name..." autocomplete="off">
+              <input type="text" id="countrySearch" placeholder="Ländernamen eingeben..." autocomplete="off">
               <div id="countryDropdown" class="autocomplete-dropdown hidden"></div>
             </div>
             <!-- Hidden input to store selected ID -->
             <input type="hidden" id="countryId">
           </div>
           <div class="input-group">
-            <label for="apiKey">API Key (Optional)</label>
-            <input type="password" id="apiKey" placeholder="Leave empty for public limits">
+            <label for="apiKey">API-Schlüssel (Optional)</label>
+            <input type="password" id="apiKey" placeholder="Für öffentliche Limits leer lassen">
           </div>
           <button id="startBtn" class="primary-btn pulse-glow" disabled>
-            <span class="btn-text">Select Country</span>
+            <span class="btn-text">Land auswählen</span>
           </button>
         </div>
       </header>
@@ -48,25 +48,25 @@
         <div class="stat-card glass-panel">
           <div class="stat-icon treasury-icon"></div>
           <div class="stat-content">
-            <h3>State Treasury</h3>
+            <h3>Staatskasse</h3>
             <div class="stat-value" id="treasuryValue">---</div>
           </div>
         </div>
         <div class="stat-card glass-panel">
           <div class="stat-icon citizens-icon"></div>
           <div class="stat-content">
-            <h3>Total Citizens</h3>
+            <h3>Einwohnerzahl</h3>
             <div class="stat-value" id="citizensCount">---</div>
           </div>
         </div>
         <div class="stat-card glass-panel scan-progress-card">
           <div class="stat-content">
-            <h3>Scan Progress</h3>
+            <h3>Scan-Fortschritt</h3>
             <div class="progress-wrapper">
               <div class="progress-bar-container">
                 <div class="progress-bar glow-bar" id="scanProgress" style="width: 0%"></div>
               </div>
-              <div class="progress-text" id="scanText">Awaiting input...</div>
+              <div class="progress-text" id="scanText">Warte auf Eingabe...</div>
             </div>
           </div>
         </div>
@@ -75,10 +75,10 @@
       <!-- Logging & Main Data Area -->
       <section class="data-section glass-panel fade-in delay-2">
         <div class="section-header">
-          <h2>Citizens Liquid Assets</h2>
+          <h2>Liquides Vermögen der Bürger</h2>
           <div class="status-indicator">
             <span class="status-dot inner-glow"></span>
-            <span id="scanStatusBadge" class="status-label">Idle</span>
+            <span id="scanStatusBadge" class="status-label">Bereit</span>
           </div>
         </div>
         
@@ -86,10 +86,10 @@
           <table id="resultsTable">
             <thead>
               <tr>
-                <th>Citizen Details</th>
-                <th>Total Wealth</th>
-                <th>Companies Value</th>
-                <th>Liquid Assets</th>
+                <th>Bürger-Details</th>
+                <th>Gesamtvermögen</th>
+                <th>Firmenwert</th>
+                <th>Liquides Vermögen</th>
               </tr>
             </thead>
             <tbody id="resultsBody">
@@ -98,7 +98,7 @@
                 <td colspan="4">
                   <div class="empty-state">
                     <div class="empty-icon"></div>
-                    <p>Select a country and initiate scan to view citizen distribution.</p>
+                    <p>Wähle ein Land und starte den Scan, um die Verteilung zu sehen.</p>
                   </div>
                 </td>
               </tr>
