@@ -190,14 +190,13 @@ input:focus {
   left: 0;
   right: 0;
   margin-top: 0.5rem;
-  background: rgba(22, 27, 34, 0.95);
-  backdrop-filter: blur(10px);
+  background: #0d1117; /* Solid dark background to prevent bleed-through */
   border: 1px solid var(--border-highlight);
   border-radius: 8px;
   max-height: 300px;
   overflow-y: auto;
-  z-index: 100;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  z-index: 9999;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
   scrollbar-width: thin;
   scrollbar-color: var(--accent-base) transparent;
 }
