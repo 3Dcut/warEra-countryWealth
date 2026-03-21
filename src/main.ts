@@ -240,6 +240,7 @@ startBtn.addEventListener('click', async () => {
         const tr = document.createElement('tr');
         tr.className = 'citizen-row slide-up';
         tr.style.animationDelay = `${(i % 10) * 0.05}s`;
+        tr.setAttribute('data-liquid', liquidAssets.toString());
         tr.innerHTML = `
           <td>
             <div class="citizen-info">
@@ -273,8 +274,23 @@ startBtn.addEventListener('click', async () => {
       }
     }
 
-    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt.`;
+    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt. Sortiere Daten...`;
     
+    // Sort rows by liquid assets descending
+    const rows = Array.from(resultsBody.querySelectorAll('tr.citizen-row'));
+    rows.sort((a, b) => {
+      const valA = parseFloat(a.getAttribute('data-liquid') || '-999999999');
+      const valB = parseFloat(b.getAttribute('data-liquid') || '-999999999');
+      return valB - valA;
+    });
+    rows.forEach(row => {
+      // Remove animation delay so they don't pop-in again when re-appended
+      (row as HTMLElement).style.animationDelay = '0s';
+      resultsBody.appendChild(row);
+    });
+
+    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt.`;
+
     drawHistogram(wealthArray);
     chartSection.classList.remove('hidden');
 
@@ -306,8 +322,8 @@ function finishScan(success: boolean = false) {
 }
 
 function drawHistogram(data: number[]) {
-  const bins = [0, 1000, 10000, 100000, 1000000, 10000000, 100000000, Infinity];
-  const labels = ['< 1k', '1k - 10k', '10k - 100k', '100k - 1M', '1M - 10M', '10M - 100M', '> 100M'];
+  const bins = [0, 100, 500, 1000, 5000, 10000, 50000, Infinity];
+  const labels = ['< 100', '100 - 500', '500 - 1k', '1k - 5k', '5k - 10k', '10k - 50k', '> 50k'];
   const counts = new Array(labels.length).fill(0);
 
   data.forEach(val => {
