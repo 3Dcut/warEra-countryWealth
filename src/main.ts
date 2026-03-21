@@ -1,5 +1,6 @@
 import './style.css';
 import { WarEraAPI } from './api';
+import Chart from 'chart.js/auto';
 
 // DOM Elements
 const countrySearchInput = document.getElementById('countrySearch') as HTMLInputElement;
@@ -9,18 +10,20 @@ const apiKeyInput = document.getElementById('apiKey') as HTMLInputElement;
 const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
 const btnText = startBtn.querySelector('.btn-text') as HTMLElement;
 
-const treasuryValueEl = document.getElementById('treasuryValue') as HTMLElement;
+const totalCitizensWealthEl = document.getElementById('totalCitizensWealth') as HTMLElement;
 const citizensCountEl = document.getElementById('citizensCount') as HTMLElement;
 const scanProgressEl = document.getElementById('scanProgress') as HTMLElement;
 const scanTextEl = document.getElementById('scanText') as HTMLElement;
 const scanStatusBadge = document.getElementById('scanStatusBadge') as HTMLElement;
 const statusDot = document.querySelector('.status-dot') as HTMLElement;
 
+const chartSection = document.getElementById('chartSection') as HTMLElement;
 const resultsBody = document.getElementById('resultsBody') as HTMLElement;
 
 let api: WarEraAPI;
 let isScanning = false;
 let countries: any[] = [];
+let wealthChart: Chart | null = null;
 
 // Initialize API instance for initial fetch without key
 api = new WarEraAPI();
@@ -147,6 +150,8 @@ startBtn.addEventListener('click', async () => {
   statusDot.className = 'status-dot warning inner-glow glow-pulse';
   
   resultsBody.innerHTML = '';
+  chartSection.classList.add('hidden');
+  if (wealthChart) wealthChart.destroy();
   
   scanProgressEl.style.width = '0%';
   scanTextEl.innerText = 'Initialisiere sichere Verbindung...';
@@ -157,21 +162,14 @@ startBtn.addEventListener('click', async () => {
   };
 
   try {
-    // 1. Fetch Country Treasury
-    scanTextEl.innerText = 'Greife auf Staatskasse zu...';
-    let countryData = await api.getCountry(countryId);
-    if (countryData?.result?.data) {
-      countryData = countryData.result.data;
-    } else if (countryData?.result) {
-      countryData = countryData.result;
+    // 1. Fetch Country details (optional, ignoring errors)
+    try {
+      await api.getCountry(countryId);
+    } catch(e) {
+      console.warn("Could not fetch country details, ignoring.", e);
     }
-
-    if (!countryData || typeof countryData.money === 'undefined') {
-      throw new Error(`Verbindung abgelehnt. Ungültige ID oder API-Beschränkung.`);
-    }
-
-    const treasury = countryData.money || 0;
-    treasuryValueEl.innerHTML = `<span class="currency-symbol">🪙</span>${treasury.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    
+    totalCitizensWealthEl.innerHTML = `<span class="currency-symbol">🪙</span>0`;
 
     // 2. Fetch All Citizens
     scanTextEl.innerText = 'Erstelle Bürger-Register...';
@@ -197,6 +195,9 @@ startBtn.addEventListener('click', async () => {
     }
 
     // 3. Process Citizens
+    let totalWealthSum = 0;
+    const wealthArray: number[] = [];
+
     for (let i = 0; i < citizens.length; i++) {
       const citizen = citizens[i];
       const citizenId = citizen._id || citizen;
@@ -231,6 +232,10 @@ startBtn.addEventListener('click', async () => {
 
         const liquidAssets = totalWealth - totalCompanyValue;
         const liquidClass = liquidAssets >= 0 ? 'text-success' : 'text-danger';
+
+        totalWealthSum += totalWealth;
+        wealthArray.push(totalWealth);
+        totalCitizensWealthEl.innerHTML = `<span class="currency-symbol">🪙</span>${totalWealthSum.toLocaleString('de-DE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
 
         const tr = document.createElement('tr');
         tr.className = 'citizen-row slide-up';
@@ -269,6 +274,10 @@ startBtn.addEventListener('click', async () => {
     }
 
     scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt.`;
+    
+    drawHistogram(wealthArray);
+    chartSection.classList.remove('hidden');
+
     finishScan(true);
 
   } catch (err: any) {
@@ -295,3 +304,61 @@ function finishScan(success: boolean = false) {
     statusDot.className = 'status-dot idle inner-glow';
   }
 }
+
+function drawHistogram(data: number[]) {
+  const bins = [0, 1000, 10000, 100000, 1000000, 10000000, 100000000, Infinity];
+  const labels = ['< 1k', '1k - 10k', '10k - 100k', '100k - 1M', '1M - 10M', '10M - 100M', '> 100M'];
+  const counts = new Array(labels.length).fill(0);
+
+  data.forEach(val => {
+    for (let i = 0; i < bins.length - 1; i++) {
+      if (val >= bins[i] && val < bins[i+1]) {
+        counts[i]++;
+        break;
+      }
+    }
+  });
+
+  const ctx = (document.getElementById('wealthChart') as HTMLCanvasElement).getContext('2d');
+  if (!ctx) return;
+
+  wealthChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Anzahl Bürger',
+        data: counts,
+        backgroundColor: 'rgba(56, 189, 248, 0.7)',
+        borderColor: 'rgba(56, 189, 248, 1)',
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Vermögensverteilung (Logarithmisch)',
+          color: '#e2e8f0',
+          font: { family: 'Inter', size: 16 }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#94a3b8' },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#94a3b8', stepSize: 1 },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+      }
+    }
+  });
+}
+

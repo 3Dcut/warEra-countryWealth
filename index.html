@@ -48,8 +48,8 @@
         <div class="stat-card glass-panel">
           <div class="stat-icon treasury-icon"></div>
           <div class="stat-content">
-            <h3>Staatskasse</h3>
-            <div class="stat-value" id="treasuryValue">---</div>
+            <h3>Bürger-Vermögen Gesamt</h3>
+            <div class="stat-value" id="totalCitizensWealth">---</div>
           </div>
         </div>
         <div class="stat-card glass-panel">
@@ -72,8 +72,15 @@
         </div>
       </section>
 
+      <!-- Chart Area -->
+      <section class="chart-section fade-in delay-2 hidden" id="chartSection">
+        <div class="glass-panel chart-container">
+          <canvas id="wealthChart"></canvas>
+        </div>
+      </section>
+
       <!-- Logging & Main Data Area -->
-      <section class="data-section glass-panel fade-in delay-2">
+      <section class="data-section glass-panel fade-in delay-3">
         <div class="section-header">
           <h2>Liquides Vermögen der Bürger</h2>
           <div class="status-indicator">
