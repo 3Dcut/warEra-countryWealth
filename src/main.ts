@@ -197,6 +197,7 @@ startBtn.addEventListener('click', async () => {
     // 3. Process Citizens
     let totalWealthSum = 0;
     const wealthArray: number[] = [];
+    let totalWealth = 0;
 
     for (let i = 0; i < citizens.length; i++) {
       const citizen = citizens[i];
@@ -206,14 +207,33 @@ startBtn.addEventListener('click', async () => {
       scanTextEl.innerText = `Analysiere Bürger ${i+1}/${citizens.length}`;
       scanProgressEl.style.width = `${((i+1)/citizens.length)*100}%`;
 
-      try {
-        const uLiteRes: any = await api.getUserLite(citizenId);
-        const userLite = uLiteRes?.result?.data || uLiteRes;
+        let level = 1;
+        let lastActivityStr = 'Unbekannt';
         
-        username = userLite.username || username;
-        const totalWealth = userLite.rankings?.userWealth?.value || 0;
+        try {
+          const uLiteRes: any = await api.getUserLite(citizenId);
+          const userLite = uLiteRes?.result?.data || uLiteRes;
+          
+          username = userLite.username || username;
+          totalWealth = userLite.rankings?.userWealth?.value || 0;
+          level = userLite.leveling?.level || 1;
+          
+          if (userLite.dates?.lastConnectionAt) {
+            const lastConn = new Date(userLite.dates.lastConnectionAt);
+            const now = new Date();
+            const diffHours = Math.floor((now.getTime() - lastConn.getTime()) / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffHours / 24);
+            
+            if (diffHours < 1) {
+              lastActivityStr = 'Gerade eben';
+            } else if (diffHours < 24) {
+              lastActivityStr = `Vor ${diffHours} h`;
+            } else {
+              lastActivityStr = `Vor ${diffDays} d`;
+            }
+          }
 
-        const compsRes: any = await api.getCompanies(citizenId);
+          const compsRes: any = await api.getCompanies(citizenId);
         const compData = compsRes?.result?.data || compsRes;
         const companyIds = compData.items || [];
         
@@ -244,9 +264,15 @@ startBtn.addEventListener('click', async () => {
         tr.innerHTML = `
           <td>
             <div class="citizen-info">
-              <div class="avatar-placeholder">${username.charAt(0).toUpperCase()}</div>
-              <div>
-                <strong>${username}</strong>
+              <div class="avatar-placeholder">
+                ${username.charAt(0).toUpperCase()}
+                <span class="citizen-level">${level}</span>
+              </div>
+              <div class="citizen-details">
+                <div class="citizen-name-wrap">
+                  <strong>${username}</strong>
+                  <span class="activity-badge">${lastActivityStr}</span>
+                </div>
                 <div class="id-hash">${citizenId.substring(0,8)}...</div>
               </div>
             </div>
