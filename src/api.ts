@@ -79,6 +79,10 @@ export class WarEraAPI {
     return this.fetchAPI("country.getCountryById", { countryId });
   }
 
+  async getAllCountries() {
+    return this.fetchAPI("country.getAllCountries", {});
+  }
+
   async getUsersByCountry(countryId: string, cursor?: string) {
     const params: any = { countryId, limit: 100 };
     if (cursor) params.cursor = cursor;

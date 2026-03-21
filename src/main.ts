@@ -2,60 +2,176 @@ import './style.css';
 import { WarEraAPI } from './api';
 
 // DOM Elements
-const countryIdInput = document.getElementById('countryId') as HTMLInputElement;
+const countrySearchInput = document.getElementById('countrySearch') as HTMLInputElement;
+const countryDropdown = document.getElementById('countryDropdown') as HTMLElement;
+const countryIdHidden = document.getElementById('countryId') as HTMLInputElement;
 const apiKeyInput = document.getElementById('apiKey') as HTMLInputElement;
 const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
+const btnText = startBtn.querySelector('.btn-text') as HTMLElement;
 
 const treasuryValueEl = document.getElementById('treasuryValue') as HTMLElement;
 const citizensCountEl = document.getElementById('citizensCount') as HTMLElement;
 const scanProgressEl = document.getElementById('scanProgress') as HTMLElement;
 const scanTextEl = document.getElementById('scanText') as HTMLElement;
 const scanStatusBadge = document.getElementById('scanStatusBadge') as HTMLElement;
+const statusDot = document.querySelector('.status-dot') as HTMLElement;
 
 const resultsBody = document.getElementById('resultsBody') as HTMLElement;
 
 let api: WarEraAPI;
 let isScanning = false;
+let countries: any[] = [];
 
+// Initialize API instance for initial fetch without key
+api = new WarEraAPI();
+
+// Initialize App
+async function init() {
+  countrySearchInput.disabled = true;
+  countrySearchInput.placeholder = "Loading countries...";
+  
+  try {
+    const data = await api.getAllCountries();
+    if (Array.isArray(data)) {
+      countries = data.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    countrySearchInput.placeholder = "Type a country name...";
+    countrySearchInput.disabled = false;
+  } catch (err) {
+    console.error("Failed to load countries", err);
+    countrySearchInput.placeholder = "Error loading countries. Enter ID manually.";
+    countrySearchInput.disabled = false;
+    // We can fallback to manual ID entry if autocomplete fails
+    setupManualFallback();
+  }
+}
+
+init();
+
+// Autocomplete Logic
+function renderDropdown(filtered: any[]) {
+  countryDropdown.innerHTML = '';
+  if (filtered.length === 0) {
+    countryDropdown.innerHTML = '<div class="dropdown-item empty">No countries found</div>';
+    countryDropdown.classList.remove('hidden');
+    return;
+  }
+
+  filtered.forEach(country => {
+    const div = document.createElement('div');
+    div.className = 'dropdown-item';
+    div.innerHTML = `
+      <span class="country-name">${country.name}</span>
+      <span class="country-code">${country.code.toUpperCase()}</span>
+    `;
+    div.addEventListener('click', () => {
+      selectCountry(country);
+    });
+    countryDropdown.appendChild(div);
+  });
+  countryDropdown.classList.remove('hidden');
+}
+
+function selectCountry(country: any) {
+  countrySearchInput.value = country.name;
+  countryIdHidden.value = country._id;
+  countryDropdown.classList.add('hidden');
+  startBtn.disabled = false;
+  btnText.innerText = 'Start Scan';
+  startBtn.classList.add('ready');
+}
+
+function setupManualFallback() {
+  // If countries fail to load, allow entering ID directly into the search
+  countrySearchInput.addEventListener('input', () => {
+    countryIdHidden.value = countrySearchInput.value.trim();
+    if (countryIdHidden.value) {
+      startBtn.disabled = false;
+      btnText.innerText = 'Start Scan';
+      startBtn.classList.add('ready');
+    } else {
+      startBtn.disabled = true;
+      btnText.innerText = 'Select Country';
+      startBtn.classList.remove('ready');
+    }
+  });
+}
+
+countrySearchInput.addEventListener('input', (e) => {
+  const val = (e.target as HTMLInputElement).value.toLowerCase();
+  
+  if (!val) {
+    countryDropdown.classList.add('hidden');
+    countryIdHidden.value = '';
+    startBtn.disabled = true;
+    btnText.innerText = 'Select Country';
+    startBtn.classList.remove('ready');
+    return;
+  }
+
+  if (countries.length > 0) {
+    const filtered = countries.filter(c => c.name.toLowerCase().includes(val) || c.code.toLowerCase().includes(val));
+    renderDropdown(filtered.slice(0, 10)); // Top 10 results
+  }
+});
+
+// Hide dropdown on outside click
+document.addEventListener('click', (e) => {
+  if (!countrySearchInput.contains(e.target as Node) && !countryDropdown.contains(e.target as Node)) {
+    countryDropdown.classList.add('hidden');
+  }
+});
+
+countrySearchInput.addEventListener('focus', () => {
+  if (countrySearchInput.value && countries.length > 0) {
+    countrySearchInput.dispatchEvent(new Event('input'));
+  } else if (!countrySearchInput.value && countries.length > 0) {
+    renderDropdown(countries.slice(0, 10));
+  }
+});
+
+
+// Scanning Logic
 startBtn.addEventListener('click', async () => {
   if (isScanning) return;
-  const countryId = countryIdInput.value.trim();
-  if (!countryId) return alert('Please enter a Country ID');
+  const countryId = countryIdHidden.value.trim();
+  if (!countryId) return alert('Please select a country from the list or enter a valid ID.');
 
   isScanning = true;
   startBtn.disabled = true;
-  startBtn.innerText = 'Scanning...';
+  startBtn.classList.remove('ready');
+  btnText.innerText = 'Scanning...';
+  
   scanStatusBadge.innerText = 'Scanning';
-  scanStatusBadge.className = 'badge scanning';
+  scanStatusBadge.className = 'status-label text-warning';
+  statusDot.className = 'status-dot warning inner-glow glow-pulse';
+  
   resultsBody.innerHTML = '';
   
   scanProgressEl.style.width = '0%';
-  scanTextEl.innerText = 'Initializing...';
+  scanTextEl.innerText = 'Initializing Secure Connection...';
 
   api = new WarEraAPI(apiKeyInput.value.trim());
 
   try {
     // 1. Fetch Country Treasury
-    scanTextEl.innerText = 'Fetching Treasury...';
-    let countryData;
-    try {
-      const res = await api.getCountry(countryId);
-      countryData = res?.result?.data;
-    } catch(err: any) {
-      // Sometimes result format varies, let's just grab the whole response if not wrapped
-      countryData = await api.getCountry(countryId);
-      if (countryData?.result) countryData = countryData.result.data;
+    scanTextEl.innerText = 'Accessing State Treasury...';
+    let countryData = await api.getCountry(countryId);
+    if (countryData?.result?.data) {
+      countryData = countryData.result.data;
+    } else if (countryData?.result) {
+      countryData = countryData.result;
     }
 
-    if (!countryData) {
-      throw new Error(`Could not fetch country data. Invalid ID or API block.`);
+    if (!countryData || typeof countryData.money === 'undefined') {
+      throw new Error(`Connection refused. Invalid ID or API constraints.`);
     }
 
     const treasury = countryData.money || 0;
-    treasuryValueEl.innerText = `$${treasury.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    treasuryValueEl.innerHTML = `<span class="currency-symbol">$</span>${treasury.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
     // 2. Fetch All Citizens
-    scanTextEl.innerText = 'Fetching Citizens...';
+    scanTextEl.innerText = 'Compiling Citizen Ledger...';
     let citizens: any[] = [];
     let cursor = undefined;
     
@@ -69,39 +185,36 @@ startBtn.addEventListener('click', async () => {
       if (!cursor) break;
     }
 
-    citizensCountEl.innerText = citizens.length.toString();
+    citizensCountEl.innerText = citizens.length.toLocaleString();
     
     if (citizens.length === 0) {
-      scanTextEl.innerText = 'No citizens found.';
+      scanTextEl.innerText = 'No citizens records found in registry.';
       finishScan();
       return;
     }
 
-    // 3. Process Citizens one by one
+    // 3. Process Citizens
     for (let i = 0; i < citizens.length; i++) {
       const citizen = citizens[i];
       const citizenId = citizen._id || citizen;
-      let username = citizen.username || 'Unknown';
+      let username = citizen.username || 'Encrypted Identity';
 
-      scanTextEl.innerText = `Processing ${i+1} / ${citizens.length} (${Math.round(((i+1)/citizens.length)*100)}%)`;
+      scanTextEl.innerText = `Analyzing Citizen ${i+1}/${citizens.length}`;
       scanProgressEl.style.width = `${((i+1)/citizens.length)*100}%`;
 
       try {
-        // Fetch user lite for total wealth and username
         const uLiteRes: any = await api.getUserLite(citizenId);
         const userLite = uLiteRes?.result?.data || uLiteRes;
         
         username = userLite.username || username;
         const totalWealth = userLite.rankings?.userWealth?.value || 0;
 
-        // Fetch companies
         const compsRes: any = await api.getCompanies(citizenId);
         const compData = compsRes?.result?.data || compsRes;
         const companyIds = compData.items || [];
         
         let totalCompanyValue = 0;
 
-        // Fetch each company's estimated value
         for (const cId of companyIds) {
           try {
             const cRes: any = await api.getCompany(cId);
@@ -109,47 +222,73 @@ startBtn.addEventListener('click', async () => {
             const evalue = cDetails.estimatedValue || 0;
             totalCompanyValue += evalue;
           } catch(e) {
-            console.error(`Error fetching company ${cId}:`, e);
+            console.error(`Error fetching company ${cId}`, e);
           }
         }
 
         const liquidAssets = totalWealth - totalCompanyValue;
+        const liquidClass = liquidAssets >= 0 ? 'text-success' : 'text-danger';
 
-        // Create table row
         const tr = document.createElement('tr');
+        tr.className = 'citizen-row slide-up';
+        tr.style.animationDelay = `${(i % 10) * 0.05}s`;
         tr.innerHTML = `
-          <td><strong>${username}</strong><br><small style="color:var(--text-muted)">${citizenId.substring(0,8)}</small></td>
-          <td>$${totalWealth.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-          <td>$${totalCompanyValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-          <td class="${liquidAssets >= 0 ? 'positive' : 'negative'}">$${liquidAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td>
+            <div class="citizen-info">
+              <div class="avatar-placeholder">${username.charAt(0).toUpperCase()}</div>
+              <div>
+                <strong>${username}</strong>
+                <div class="id-hash">${citizenId.substring(0,8)}...</div>
+              </div>
+            </div>
+          </td>
+          <td class="wealth-col font-mono">$${totalWealth.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td class="wealth-col font-mono text-muted">$${totalCompanyValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td class="wealth-col font-mono ${liquidClass} fw-bold">$${liquidAssets.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
         `;
         resultsBody.appendChild(tr);
 
       } catch (err) {
         console.error(`Failed to process citizen ${citizenId}`, err);
         const tr = document.createElement('tr');
+        tr.className = 'citizen-row error-row slide-up';
         tr.innerHTML = `
-          <td><strong>${username || citizenId}</strong></td>
-          <td colspan="3" style="color:var(--error); font-style:italic">Failed to load data</td>
+          <td>
+            <div class="citizen-info">
+              <div class="avatar-placeholder error-avatar">!</div>
+              <div><strong>${username}</strong></div>
+            </div>
+          </td>
+          <td colspan="3" class="text-danger">Extraction Failed: Data Encrypted</td>
         `;
         resultsBody.appendChild(tr);
       }
     }
 
-    scanTextEl.innerText = `Completed scan of ${citizens.length} citizens.`;
-    finishScan();
+    scanTextEl.innerText = `Scan Complete: ${citizens.length.toLocaleString()} identities deciphered.`;
+    finishScan(true);
 
   } catch (err: any) {
+    console.error(err);
     alert(err.message);
-    scanTextEl.innerText = 'Scan failed.';
-    finishScan();
+    scanTextEl.innerText = 'System Failure: Scan Aborted.';
+    finishScan(false);
   }
 });
 
-function finishScan() {
+function finishScan(success: boolean = false) {
   isScanning = false;
   startBtn.disabled = false;
-  startBtn.innerText = 'Start Scan';
-  scanStatusBadge.innerText = 'Done';
-  scanStatusBadge.className = 'badge done';
+  startBtn.classList.add('ready');
+  btnText.innerText = 'Rescan Country';
+  
+  if (success) {
+    scanStatusBadge.innerText = 'Active';
+    scanStatusBadge.className = 'status-label text-success';
+    statusDot.className = 'status-dot success inner-glow glow-pulse';
+  } else {
+    scanStatusBadge.innerText = 'Idle / Error';
+    scanStatusBadge.className = 'status-label text-muted';
+    statusDot.className = 'status-dot idle inner-glow';
+  }
 }
