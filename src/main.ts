@@ -25,6 +25,19 @@ let isScanning = false;
 let countries: any[] = [];
 let wealthChart: Chart | null = null;
 
+interface CitizenData {
+  citizenId: string;
+  username: string;
+  level: number;
+  totalWealth: number;
+  totalCompanyValue: number;
+  liquidAssets: number;
+  lastActivityStr: string;
+  diffDays: number;
+  diffHours: number;
+}
+let allCitizensData: CitizenData[] = [];
+
 // Initialize API instance for initial fetch without key
 api = new WarEraAPI();
 
@@ -152,6 +165,7 @@ startBtn.addEventListener('click', async () => {
   resultsBody.innerHTML = '';
   chartSection.classList.add('hidden');
   if (wealthChart) wealthChart.destroy();
+  allCitizensData = [];
   
   scanProgressEl.style.width = '0%';
   scanTextEl.innerText = 'Initialisiere sichere Verbindung...';
@@ -195,10 +209,6 @@ startBtn.addEventListener('click', async () => {
     }
 
     // 3. Process Citizens
-    let totalWealthSum = 0;
-    const wealthArray: number[] = [];
-    let totalWealth = 0;
-
     for (let i = 0; i < citizens.length; i++) {
       const citizen = citizens[i];
       const citizenId = citizen._id || citizen;
@@ -209,6 +219,9 @@ startBtn.addEventListener('click', async () => {
 
         let level = 1;
         let lastActivityStr = 'Unbekannt';
+        let totalWealth = 0;
+        let diffHours = 9999;
+        let diffDays = 999;
         
         try {
           const uLiteRes: any = await api.getUserLite(citizenId);
@@ -221,8 +234,8 @@ startBtn.addEventListener('click', async () => {
           if (userLite.dates?.lastConnectionAt) {
             const lastConn = new Date(userLite.dates.lastConnectionAt);
             const now = new Date();
-            const diffHours = Math.floor((now.getTime() - lastConn.getTime()) / (1000 * 60 * 60));
-            const diffDays = Math.floor(diffHours / 24);
+            diffHours = Math.floor((now.getTime() - lastConn.getTime()) / (1000 * 60 * 60));
+            diffDays = Math.floor(diffHours / 24);
             
             if (diffHours < 1) {
               lastActivityStr = 'Gerade eben';
@@ -251,75 +264,27 @@ startBtn.addEventListener('click', async () => {
         }
 
         const liquidAssets = totalWealth - totalCompanyValue;
-        const liquidClass = liquidAssets >= 0 ? 'text-success' : 'text-danger';
-
-        totalWealthSum += totalWealth;
-        wealthArray.push(totalWealth);
-        totalCitizensWealthEl.innerHTML = `<span class="currency-symbol">🪙</span>${totalWealthSum.toLocaleString('de-DE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
-
-        const tr = document.createElement('tr');
-        tr.className = 'citizen-row slide-up';
-        tr.style.animationDelay = `${(i % 10) * 0.05}s`;
-        tr.setAttribute('data-liquid', liquidAssets.toString());
-        tr.innerHTML = `
-          <td>
-            <div class="citizen-info">
-              <div class="avatar-placeholder">
-                ${username.charAt(0).toUpperCase()}
-                <span class="citizen-level">${level}</span>
-              </div>
-              <div class="citizen-details">
-                <div class="citizen-name-wrap">
-                  <strong>${username}</strong>
-                  <span class="activity-badge">${lastActivityStr}</span>
-                </div>
-                <div class="id-hash">${citizenId.substring(0,8)}...</div>
-              </div>
-            </div>
-          </td>
-          <td class="wealth-col font-mono">🪙 ${totalWealth.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-          <td class="wealth-col font-mono text-muted">🪙 ${totalCompanyValue.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-          <td class="wealth-col font-mono ${liquidClass} fw-bold">🪙 ${liquidAssets.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-        `;
-        resultsBody.appendChild(tr);
+        
+        allCitizensData.push({
+          citizenId,
+          username,
+          level,
+          totalWealth,
+          totalCompanyValue,
+          liquidAssets,
+          lastActivityStr,
+          diffDays,
+          diffHours
+        });
 
       } catch (err) {
         console.error(`Failed to process citizen ${citizenId}`, err);
-        const tr = document.createElement('tr');
-        tr.className = 'citizen-row error-row slide-up';
-        tr.innerHTML = `
-          <td>
-            <div class="citizen-info">
-              <div class="avatar-placeholder error-avatar">!</div>
-              <div><strong>${username}</strong></div>
-            </div>
-          </td>
-          <td colspan="3" class="text-danger">Extraktion fehlgeschlagen: Daten verschlüsselt</td>
-        `;
-        resultsBody.appendChild(tr);
       }
     }
 
-    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt. Sortiere Daten...`;
+    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt. Rendere Daten...`;
     
-    // Sort rows by liquid assets descending
-    const rows = Array.from(resultsBody.querySelectorAll('tr.citizen-row'));
-    rows.sort((a, b) => {
-      const valA = parseFloat(a.getAttribute('data-liquid') || '-999999999');
-      const valB = parseFloat(b.getAttribute('data-liquid') || '-999999999');
-      return valB - valA;
-    });
-    rows.forEach(row => {
-      // Remove animation delay so they don't pop-in again when re-appended
-      (row as HTMLElement).style.animationDelay = '0s';
-      resultsBody.appendChild(row);
-    });
-
-    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt.`;
-
-    drawHistogram(wealthArray);
-    chartSection.classList.remove('hidden');
-
+    renderData();
     finishScan(true);
 
   } catch (err: any) {
@@ -347,15 +312,102 @@ function finishScan(success: boolean = false) {
   }
 }
 
-function drawHistogram(data: number[]) {
+function renderData() {
+  resultsBody.innerHTML = '';
+  let totalWealthSum = 0;
+  let filteredData = [...allCitizensData];
+  
+  const filterVal = (document.getElementById('activity-filter') as HTMLSelectElement).value;
+
+  if (filterVal === '24h') {
+    filteredData = filteredData.filter(c => c.diffHours < 24);
+  } else if (filterVal === '3d') {
+    filteredData = filteredData.filter(c => c.diffDays <= 3);
+  } else if (filterVal === '7d') {
+    filteredData = filteredData.filter(c => c.diffDays <= 7);
+  } else if (filterVal === 'inactive') {
+    filteredData = filteredData.filter(c => c.diffDays > 7);
+  }
+
+  // Sort by liquid assets descending
+  filteredData.sort((a, b) => b.liquidAssets - a.liquidAssets);
+
+  filteredData.forEach((c, i) => {
+    totalWealthSum += c.totalWealth;
+    const liquidClass = c.liquidAssets >= 0 ? 'text-success' : 'text-danger';
+    
+    const tr = document.createElement('tr');
+    tr.className = 'citizen-row slide-up';
+    tr.style.animationDelay = `${(i % 10) * 0.02}s`;
+    tr.innerHTML = `
+      <td>
+        <div class="citizen-info">
+          <div class="avatar-placeholder">
+            ${c.username.charAt(0).toUpperCase()}
+            <span class="citizen-level">${c.level}</span>
+          </div>
+          <div class="citizen-details">
+            <div class="citizen-name-wrap">
+              <strong>${c.username}</strong>
+              <span class="activity-badge">${c.lastActivityStr}</span>
+            </div>
+            <div class="id-hash">${c.citizenId.substring(0,8)}...</div>
+          </div>
+        </div>
+      </td>
+      <td class="wealth-col font-mono">🪙 ${c.totalWealth.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+      <td class="wealth-col font-mono text-muted">🪙 ${c.totalCompanyValue.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+      <td class="wealth-col font-mono ${liquidClass} fw-bold">🪙 ${c.liquidAssets.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+    `;
+    resultsBody.appendChild(tr);
+  });
+
+  totalCitizensWealthEl.innerHTML = `<span class="currency-symbol">🪙</span>${totalWealthSum.toLocaleString('de-DE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+  scanTextEl.innerText = `Anzeige: ${filteredData.length.toLocaleString('de-DE')} von ${allCitizensData.length.toLocaleString('de-DE')} Bürgern.`;
+
+  drawHistogram(filteredData);
+  chartSection.classList.remove('hidden');
+}
+
+document.getElementById('activity-filter')?.addEventListener('change', () => {
+  if (allCitizensData.length > 0) {
+    renderData();
+  }
+});
+
+function drawHistogram(data: CitizenData[]) {
   const bins = [0, 100, 500, 1000, 5000, 10000, 50000, Infinity];
   const labels = ['< 100', '100 - 500', '500 - 1k', '1k - 5k', '5k - 10k', '10k - 50k', '> 50k'];
-  const counts = new Array(labels.length).fill(0);
+  
+  const tiers = [
+    { label: 'Level 1-9', min: 1, max: 9, color: 'rgba(148, 163, 184, 0.8)' },
+    { label: 'Level 10-19', min: 10, max: 19, color: 'rgba(56, 189, 248, 0.8)' },
+    { label: 'Level 20-29', min: 20, max: 29, color: 'rgba(168, 85, 247, 0.8)' },
+    { label: 'Level 30+', min: 30, max: 999, color: 'rgba(234, 179, 8, 0.8)' }
+  ];
 
-  data.forEach(val => {
+  const datasets = tiers.map(t => ({
+    label: t.label,
+    data: new Array(labels.length).fill(0),
+    backgroundColor: t.color,
+    borderWidth: 1,
+    borderRadius: 4
+  }));
+
+  data.forEach(c => {
+    const val = c.totalWealth;
+    let binIndex = 0;
     for (let i = 0; i < bins.length - 1; i++) {
       if (val >= bins[i] && val < bins[i+1]) {
-        counts[i]++;
+        binIndex = i;
+        break;
+      }
+    }
+    
+    for (const ds of datasets) {
+      const t = tiers.find(tier => tier.label === ds.label);
+      if (t && c.level >= t.min && c.level <= t.max) {
+        ds.data[binIndex]++;
         break;
       }
     }
@@ -364,37 +416,36 @@ function drawHistogram(data: number[]) {
   const ctx = (document.getElementById('wealthChart') as HTMLCanvasElement).getContext('2d');
   if (!ctx) return;
 
+  if (wealthChart) {
+    wealthChart.destroy();
+  }
+
   wealthChart = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: 'Anzahl Bürger',
-        data: counts,
-        backgroundColor: 'rgba(56, 189, 248, 0.7)',
-        borderColor: 'rgba(56, 189, 248, 1)',
-        borderWidth: 1,
-        borderRadius: 4
-      }]
+      datasets: datasets
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: true, labels: { color: '#94a3b8' } },
         title: {
           display: true,
-          text: 'Vermögensverteilung (Logarithmisch)',
+          text: 'Vermögensverteilung nach Account-Level',
           color: '#e2e8f0',
           font: { family: 'Inter', size: 16 }
         }
       },
       scales: {
         x: {
+          stacked: true,
           ticks: { color: '#94a3b8' },
           grid: { color: 'rgba(255,255,255,0.05)' }
         },
         y: {
+          stacked: true,
           beginAtZero: true,
           ticks: { color: '#94a3b8', stepSize: 1 },
           grid: { color: 'rgba(255,255,255,0.05)' }

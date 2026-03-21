@@ -24,12 +24,24 @@
         </div>
         
         <div class="controls-panel">
-          <div class="input-group search-group">
-            <label for="countrySearch">Land</label>
+          <div class="input-group">
+            <label for="country-input">Land</label>
             <div class="autocomplete-wrapper">
-              <input type="text" id="countrySearch" placeholder="Ländernamen eingeben..." autocomplete="off">
-              <div id="countryDropdown" class="autocomplete-dropdown hidden"></div>
+              <input type="text" id="country-input" placeholder="Ländernamen eingeben..." autocomplete="off">
+              <div id="autocomplete-list" class="autocomplete-dropdown hidden"></div>
             </div>
+          </div>
+          <div class="input-group">
+            <label for="activity-filter">Letzter Login Filter</label>
+            <select id="activity-filter" style="background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1.2rem; border-radius: 8px; font-size: 1rem; font-family: var(--font-body); outline: none;">
+              <option value="all">Alle Bürger</option>
+              <option value="24h">Letzte 24 Stunden</option>
+              <option value="3d">Letzte 3 Tage</option>
+              <option value="7d">Letzte 7 Tage</option>
+              <option value="inactive">Inaktiv (> 7 Tage)</option>
+            </select>
+          </div>
+          <div class="input-group">
             <!-- Hidden input to store selected ID -->
             <input type="hidden" id="countryId">
           </div>
