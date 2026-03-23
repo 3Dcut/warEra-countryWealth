@@ -210,15 +210,30 @@ startBtn.addEventListener('click', async () => {
 
     // 3. Process Citizens
     const startTime = Date.now();
-    const CHUNK_SIZE = 20; // wir können nun große Chunks nehmen, da die API eine Queue hat
-    let processedCount = 0;
+    for (let i = 0; i < citizens.length; i++) {
+      const citizen = citizens[i];
+      const citizenId = citizen._id || citizen;
+      let username = citizen.username || 'Verschlüsselte Identität';
 
-    for (let i = 0; i < citizens.length; i += CHUNK_SIZE) {
-      const chunk = citizens.slice(i, i + CHUNK_SIZE);
+      const elapsed = Date.now() - startTime;
+      const avgTimePerCitizen = i === 0 ? 0 : elapsed / i;
+      const remainingCitizens = citizens.length - i;
+      const etaMs = avgTimePerCitizen * remainingCitizens;
+      
+      let etaStr = '';
+      if (i > 0) {
+         const etaSeconds = Math.round(etaMs / 1000);
+         if (etaSeconds < 60) {
+             etaStr = ` (ETA: ~${etaSeconds}s)`;
+         } else {
+             const m = Math.floor(etaSeconds / 60);
+             const s = etaSeconds % 60;
+             etaStr = ` (ETA: ~${m}m ${s}s)`;
+         }
+      }
 
-      await Promise.all(chunk.map(async (citizen) => {
-        const citizenId = citizen._id || citizen;
-        let username = citizen.username || 'Verschlüsselte Identität';
+      scanTextEl.innerText = `Analysiere Bürger ${i+1}/${citizens.length}${etaStr}`;
+      scanProgressEl.style.width = `${((i+1)/citizens.length)*100}%`;
 
         let level = 1;
         let lastActivityStr = 'Unbekannt';
@@ -255,7 +270,7 @@ startBtn.addEventListener('click', async () => {
           
           let totalCompanyValue = 0;
 
-          await Promise.all(companyIds.map(async (cId: string) => {
+          for (const cId of companyIds) {
             try {
               const cRes: any = await api.getCompany(cId);
               const cDetails = cRes?.result?.data || cRes;
@@ -264,7 +279,7 @@ startBtn.addEventListener('click', async () => {
             } catch(e) {
               console.error(`Error fetching company ${cId}`, e);
             }
-          }));
+          }
 
           const liquidAssets = totalWealth - totalCompanyValue;
           
@@ -283,28 +298,6 @@ startBtn.addEventListener('click', async () => {
         } catch (err) {
           console.error(`Failed to process citizen ${citizenId}`, err);
         }
-
-        processedCount++;
-        const elapsed = Date.now() - startTime;
-        const avgTimePerCitizen = processedCount === 0 ? 0 : elapsed / processedCount;
-        const remainingCitizens = citizens.length - processedCount;
-        const etaMs = avgTimePerCitizen * remainingCitizens;
-        
-        let etaStr = '';
-        if (processedCount > 0) {
-           const etaSeconds = Math.round(etaMs / 1000);
-           if (etaSeconds < 60) {
-               etaStr = ` (ETA: ~${etaSeconds}s)`;
-           } else {
-               const m = Math.floor(etaSeconds / 60);
-               const s = etaSeconds % 60;
-               etaStr = ` (ETA: ~${m}m ${s}s)`;
-           }
-        }
-
-        scanTextEl.innerText = `Analysiere Bürger ${processedCount}/${citizens.length}${etaStr}`;
-        scanProgressEl.style.width = `${(processedCount/citizens.length)*100}%`;
-      }));
     }
 
     scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt. Rendere Daten...`;

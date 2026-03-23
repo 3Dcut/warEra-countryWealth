@@ -3,40 +3,20 @@ const BASE_URL = "https://api2.warera.io/trpc";
 export class WarEraAPI {
   private apiKey: string = "";
   public onRateLimit?: (ms: number) => void;
-  public onDelayChange?: (ms: number) => void;
-
-  public currentDelayMs: number = 650;
-  public current429WaitTime: number = 5000;
-  private queuePromise: Promise<void> = Promise.resolve();
-  private isWaitingFor429 = false;
 
   constructor(apiKey: string = "") {
     this.apiKey = apiKey;
-    // 1000/min = ~16 req/s => 60ms delay. Wir nutzen 65ms für etwas Puffer.
-    // 100/min = ~1.6 req/s => 600ms delay. Wir nutzen 650ms für etwas Puffer.
-    this.currentDelayMs = apiKey ? 65 : 650;
   }
 
   private async sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private async waitForTurn() {
-    const prevPromise = this.queuePromise;
-    let resolveQueue!: () => void;
-    this.queuePromise = new Promise(resolve => { resolveQueue = resolve; });
-    
-    await prevPromise;
-    
-    while (this.isWaitingFor429) {
-      await this.sleep(100);
-    }
-
-    setTimeout(resolveQueue, this.currentDelayMs);
-  }
-
   private async fetchAPI(endpoint: string, inputParams: any = null, retries = 5): Promise<any> {
     
+    // Einfacher 20ms Delay vor jedem Request
+    await this.sleep(20);
+
     let url = `${BASE_URL}/${endpoint}`;
     if (inputParams) {
       url += `?input=${encodeURIComponent(JSON.stringify(inputParams))}`;
@@ -51,33 +31,18 @@ export class WarEraAPI {
       headers["x-api-key"] = this.apiKey;
     }
 
-    // Exakter Zeittakt
-    await this.waitForTurn();
-
     try {
       const response = await fetch(url, { method: "GET", headers });
       
       if (response.status === 429) {
         if (retries > 0) {
-          console.warn(`429 Too Many Requests for ${endpoint}. Waiting...`);
+          console.warn(`429 Too Many Requests for ${endpoint}. Waiting 5s...`);
           
-          let waitTime = this.current429WaitTime;
-          const retryAfterStr = response.headers.get('Retry-After');
-          if (retryAfterStr) {
-            const parsed = parseInt(retryAfterStr, 10);
-            if (!isNaN(parsed)) waitTime = parsed * 1000;
-          }
-
-          // Erhöhe die Strafe für das nächste 429-Event (max 30 Sekunden)
-          this.current429WaitTime = Math.min(this.current429WaitTime + 5000, 30000);
-
           if (this.onRateLimit) {
-            this.onRateLimit(waitTime);
+            this.onRateLimit(5000);
           }
 
-          this.isWaitingFor429 = true;
-          await this.sleep(waitTime);
-          this.isWaitingFor429 = false;
+          await this.sleep(5000);
 
           return this.fetchAPI(endpoint, inputParams, retries - 1);
         }
@@ -86,11 +51,6 @@ export class WarEraAPI {
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // Bei Erfolg: Die 429-Strafe entspannt sich langsam wieder (min 5 Sekunden)
-      if (this.current429WaitTime > 5000) {
-        this.current429WaitTime = Math.max(5000, this.current429WaitTime - 1000);
       }
 
       const raw = await response.json();
