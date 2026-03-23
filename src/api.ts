@@ -3,6 +3,11 @@ const BASE_URL = "https://api2.warera.io/trpc";
 export class WarEraAPI {
   private apiKey: string = "";
   public onRateLimit?: (ms: number) => void;
+  public onDelayChange?: (ms: number) => void;
+
+  public currentDelayMs: number = 20; // Start-Verzögerung pro Request
+  private queuePromise: Promise<void> = Promise.resolve();
+  private isWaitingFor429 = false;
 
   constructor(apiKey: string = "") {
     this.apiKey = apiKey;
@@ -12,7 +17,21 @@ export class WarEraAPI {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private async fetchAPI(endpoint: string, inputParams: any = null, retries = 3): Promise<any> {
+  private async waitForTurn() {
+    const prevPromise = this.queuePromise;
+    let resolveQueue!: () => void;
+    this.queuePromise = new Promise(resolve => { resolveQueue = resolve; });
+    
+    await prevPromise;
+    
+    while (this.isWaitingFor429) {
+      await this.sleep(100);
+    }
+
+    setTimeout(resolveQueue, this.currentDelayMs);
+  }
+
+  private async fetchAPI(endpoint: string, inputParams: any = null, retries = 5): Promise<any> {
     
     let url = `${BASE_URL}/${endpoint}`;
     if (inputParams) {
@@ -28,12 +47,19 @@ export class WarEraAPI {
       headers["x-api-key"] = this.apiKey;
     }
 
+    // Stelle sicher, dass wir an der Reihe sind und warten unser dynamisches Delay ab
+    await this.waitForTurn();
+
     try {
       const response = await fetch(url, { method: "GET", headers });
       
       if (response.status === 429) {
+        // Massive Erhöhung des Delays zur Strafe und Vermeidung weiterer 429
+        this.currentDelayMs = Math.min(this.currentDelayMs * 1.5 + 200, 10000);
+        if (this.onDelayChange) this.onDelayChange(this.currentDelayMs);
+
         if (retries > 0) {
-          console.warn(`429 Too Many Requests for ${endpoint}. Waiting...`);
+          console.warn(`429 Too Many Requests for ${endpoint}. Waiting... Neues Base-Delay: ${Math.round(this.currentDelayMs)}ms`);
           
           let waitTime = 5000;
           const retryAfterStr = response.headers.get('Retry-After');
@@ -46,7 +72,11 @@ export class WarEraAPI {
             this.onRateLimit(waitTime);
           }
 
+          // Pausiere alle anderen, auf die Queue wartenden Requests
+          this.isWaitingFor429 = true;
           await this.sleep(waitTime);
+          this.isWaitingFor429 = false;
+
           return this.fetchAPI(endpoint, inputParams, retries - 1);
         }
         throw new Error("Ratenlimit dauerhaft überschritten. Bitte API-Key verwenden oder später versuchen.");
@@ -54,6 +84,12 @@ export class WarEraAPI {
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Bei Erfolg: Delay minimal absenken (belohnen), damit wir wieder schneller werden
+      if (this.currentDelayMs > 0) {
+        this.currentDelayMs = Math.max(0, this.currentDelayMs - 1);
+        if (this.onDelayChange) this.onDelayChange(this.currentDelayMs);
       }
 
       const raw = await response.json();
