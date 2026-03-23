@@ -209,15 +209,13 @@ startBtn.addEventListener('click', async () => {
     }
 
     // 3. Process Citizens
-    const CHUNK_SIZE = 10;
-    let processedCount = 0;
+    for (let i = 0; i < citizens.length; i++) {
+      const citizen = citizens[i];
+      const citizenId = citizen._id || citizen;
+      let username = citizen.username || 'Verschlüsselte Identität';
 
-    for (let i = 0; i < citizens.length; i += CHUNK_SIZE) {
-      const chunk = citizens.slice(i, i + CHUNK_SIZE);
-
-      await Promise.all(chunk.map(async (citizen) => {
-        const citizenId = citizen._id || citizen;
-        let username = citizen.username || 'Verschlüsselte Identität';
+      scanTextEl.innerText = `Analysiere Bürger ${i+1}/${citizens.length}`;
+      scanProgressEl.style.width = `${((i+1)/citizens.length)*100}%`;
 
         let level = 1;
         let lastActivityStr = 'Unbekannt';
@@ -254,7 +252,7 @@ startBtn.addEventListener('click', async () => {
           
           let totalCompanyValue = 0;
 
-          await Promise.all(companyIds.map(async (cId: string) => {
+          for (const cId of companyIds) {
             try {
               const cRes: any = await api.getCompany(cId);
               const cDetails = cRes?.result?.data || cRes;
@@ -263,7 +261,7 @@ startBtn.addEventListener('click', async () => {
             } catch(e) {
               console.error(`Error fetching company ${cId}`, e);
             }
-          }));
+          }
 
           const liquidAssets = totalWealth - totalCompanyValue;
           
@@ -282,11 +280,6 @@ startBtn.addEventListener('click', async () => {
         } catch (err) {
           console.error(`Failed to process citizen ${citizenId}`, err);
         }
-
-        processedCount++;
-        scanTextEl.innerText = `Analysiere Bürger ${processedCount}/${citizens.length}`;
-        scanProgressEl.style.width = `${(processedCount / citizens.length) * 100}%`;
-      }));
     }
 
     scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt. Rendere Daten...`;
