@@ -5,14 +5,34 @@ export class WarEraAPI {
   public onRateLimit?: (ms: number) => void;
   public onDelayChange?: (ms: number) => void;
 
-  public current429WaitTime: number = 5000; // start at 5s min
+  public currentDelayMs: number = 650;
+  public current429WaitTime: number = 5000;
+  private queuePromise: Promise<void> = Promise.resolve();
+  private isWaitingFor429 = false;
 
   constructor(apiKey: string = "") {
     this.apiKey = apiKey;
+    // 1000/min = ~16 req/s => 60ms delay. Wir nutzen 65ms für etwas Puffer.
+    // 100/min = ~1.6 req/s => 600ms delay. Wir nutzen 650ms für etwas Puffer.
+    this.currentDelayMs = apiKey ? 65 : 650;
   }
 
   private async sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private async waitForTurn() {
+    const prevPromise = this.queuePromise;
+    let resolveQueue!: () => void;
+    this.queuePromise = new Promise(resolve => { resolveQueue = resolve; });
+    
+    await prevPromise;
+    
+    while (this.isWaitingFor429) {
+      await this.sleep(100);
+    }
+
+    setTimeout(resolveQueue, this.currentDelayMs);
   }
 
   private async fetchAPI(endpoint: string, inputParams: any = null, retries = 5): Promise<any> {
@@ -30,6 +50,9 @@ export class WarEraAPI {
       headers["Authorization"] = `Bearer ${this.apiKey}`;
       headers["x-api-key"] = this.apiKey;
     }
+
+    // Exakter Zeittakt
+    await this.waitForTurn();
 
     try {
       const response = await fetch(url, { method: "GET", headers });
@@ -52,7 +75,10 @@ export class WarEraAPI {
             this.onRateLimit(waitTime);
           }
 
+          this.isWaitingFor429 = true;
           await this.sleep(waitTime);
+          this.isWaitingFor429 = false;
+
           return this.fetchAPI(endpoint, inputParams, retries - 1);
         }
         throw new Error("Ratenlimit dauerhaft überschritten. Bitte API-Key verwenden oder später versuchen.");
