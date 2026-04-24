@@ -1,11 +1,13 @@
 const BASE_URL = "https://api2.warera.io/trpc";
 
 export class WarEraAPI {
-  private apiKey: string = "";
+  private keys: string[];
+  private currentKeyIdx = 0;
+  private rateLimitedUntil: number[] = [0, 0];
   public onRateLimit?: (ms: number) => void;
 
-  constructor(apiKey: string = "") {
-    this.apiKey = apiKey;
+  constructor(apiKey1: string = "", apiKey2: string = "") {
+    this.keys = [apiKey1, apiKey2];
   }
 
   private async sleep(ms: number) {
@@ -13,10 +15,6 @@ export class WarEraAPI {
   }
 
   private async fetchAPI(endpoint: string, inputParams: any = null, retries = 5): Promise<any> {
-    
-    // Einfacher 20ms Delay vor jedem Request
-    await this.sleep(20);
-
     let url = `${BASE_URL}/${endpoint}`;
     if (inputParams) {
       url += `?input=${encodeURIComponent(JSON.stringify(inputParams))}`;
@@ -26,29 +24,37 @@ export class WarEraAPI {
       "Content-Type": "application/json"
     };
 
-    if (this.apiKey) {
-      headers["Authorization"] = `Bearer ${this.apiKey}`;
-      headers["x-api-key"] = this.apiKey;
+    const activeKey = this.keys[this.currentKeyIdx];
+    if (activeKey) {
+      headers["Authorization"] = `Bearer ${activeKey}`;
+      headers["x-api-key"] = activeKey;
     }
 
     try {
       const response = await fetch(url, { method: "GET", headers });
-      
+
       if (response.status === 429) {
         if (retries > 0) {
-          console.warn(`429 Too Many Requests for ${endpoint}. Waiting 5s...`);
-          
-          if (this.onRateLimit) {
-            this.onRateLimit(5000);
-          }
+          this.rateLimitedUntil[this.currentKeyIdx] = Date.now() + 5000;
+          const otherIdx = 1 - this.currentKeyIdx;
 
-          await this.sleep(5000);
+          if (this.rateLimitedUntil[otherIdx] > Date.now()) {
+            // Beide Keys gesperrt — auf den frühesten warten
+            const waitMs = Math.max(1, Math.min(this.rateLimitedUntil[0], this.rateLimitedUntil[1]) - Date.now());
+            console.warn(`Beide Keys rate-limited. Warte ${waitMs}ms...`);
+            if (this.onRateLimit) this.onRateLimit(waitMs);
+            await this.sleep(waitMs);
+          } else {
+            // Zum anderen Key wechseln, sofort weiter
+            console.warn(`429 auf Key ${this.currentKeyIdx + 1}, wechsle zu Key ${otherIdx + 1}.`);
+            this.currentKeyIdx = otherIdx;
+          }
 
           return this.fetchAPI(endpoint, inputParams, retries - 1);
         }
         throw new Error("Ratenlimit dauerhaft überschritten. Bitte API-Key verwenden oder später versuchen.");
       }
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -57,7 +63,7 @@ export class WarEraAPI {
       return raw?.result?.data || raw;
     } catch (err: any) {
       if (retries > 0) {
-        console.warn(`Error compiling ${endpoint}: ${err.message}. Retrying...`);
+        console.warn(`Error fetching ${endpoint}: ${err.message}. Retrying...`);
         await this.sleep(2000);
         return this.fetchAPI(endpoint, inputParams, retries - 1);
       }

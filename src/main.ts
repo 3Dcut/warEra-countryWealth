@@ -7,6 +7,7 @@ const countrySearchInput = document.getElementById('countrySearch') as HTMLInput
 const countryDropdown = document.getElementById('countryDropdown') as HTMLElement;
 const countryIdHidden = document.getElementById('countryId') as HTMLInputElement;
 const apiKeyInput = document.getElementById('apiKey') as HTMLInputElement;
+const apiKey2Input = document.getElementById('apiKey2') as HTMLInputElement;
 const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
 const btnText = startBtn.querySelector('.btn-text') as HTMLElement;
 
@@ -170,7 +171,7 @@ startBtn.addEventListener('click', async () => {
   scanProgressEl.style.width = '0%';
   scanTextEl.innerText = 'Initialisiere sichere Verbindung...';
 
-  api = new WarEraAPI(apiKeyInput.value.trim());
+  api = new WarEraAPI(apiKeyInput.value.trim(), apiKey2Input.value.trim());
   api.onRateLimit = (ms) => {
     scanTextEl.innerText = `API-Limit erreicht. Warte ${Math.round(ms / 1000)} Sekunden...`;
   };
