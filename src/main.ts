@@ -21,6 +21,21 @@ const statusDot = document.querySelector('.status-dot') as HTMLElement;
 const chartSection = document.getElementById('chartSection') as HTMLElement;
 const resultsBody = document.getElementById('resultsBody') as HTMLElement;
 
+// Persist API keys across sessions
+apiKeyInput.value = localStorage.getItem('apiKey1') ?? '';
+apiKey2Input.value = localStorage.getItem('apiKey2') ?? '';
+function checkDuplicateKeys() {
+  const k1 = apiKeyInput.value.trim();
+  const k2 = apiKey2Input.value.trim();
+  const isDuplicate = k1 && k2 && k1 === k2;
+  apiKey2Input.setCustomValidity(isDuplicate ? 'Beide Keys sind identisch – Key-Rotation hat keinen Effekt.' : '');
+  apiKey2Input.reportValidity();
+}
+
+apiKeyInput.addEventListener('input', () => { localStorage.setItem('apiKey1', apiKeyInput.value); checkDuplicateKeys(); });
+apiKey2Input.addEventListener('input', () => { localStorage.setItem('apiKey2', apiKey2Input.value); checkDuplicateKeys(); });
+checkDuplicateKeys();
+
 let api: WarEraAPI;
 let isScanning = false;
 let countries: any[] = [];
