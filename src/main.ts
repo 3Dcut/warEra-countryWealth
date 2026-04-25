@@ -40,14 +40,22 @@ let api: WarEraAPI;
 let isScanning = false;
 let countries: any[] = [];
 let wealthChart: Chart | null = null;
+let compositionChart: Chart | null = null;
+
+type SortKey = 'totalWealth' | 'money' | 'companies' | 'items' | 'equipments' | 'weapons';
+let sortKey: SortKey = 'totalWealth';
+let sortAsc = false;
 
 interface CitizenData {
   citizenId: string;
   username: string;
   level: number;
   totalWealth: number;
-  totalCompanyValue: number;
-  liquidAssets: number;
+  money: number;
+  companies: number;
+  items: number;
+  equipments: number;
+  weapons: number;
   lastActivityStr: string;
   diffDays: number;
   diffHours: number;
@@ -181,6 +189,7 @@ startBtn.addEventListener('click', async () => {
   resultsBody.innerHTML = '';
   chartSection.classList.add('hidden');
   if (wealthChart) wealthChart.destroy();
+  if (compositionChart) compositionChart.destroy();
   allCitizensData = [];
   
   scanProgressEl.style.width = '0%';
@@ -253,64 +262,39 @@ startBtn.addEventListener('click', async () => {
 
         let level = 1;
         let lastActivityStr = 'Unbekannt';
-        let totalWealth = 0;
         let diffHours = 9999;
         let diffDays = 999;
-        
+
         try {
-          const uLiteRes: any = await api.getUserLite(citizenId);
-          const userLite = uLiteRes?.result?.data || uLiteRes;
-          
-          username = userLite.username || username;
-          totalWealth = userLite.rankings?.userWealth?.value || 0;
-          level = userLite.leveling?.level || 1;
-          
-          if (userLite.dates?.lastConnectionAt) {
-            const lastConn = new Date(userLite.dates.lastConnectionAt);
+          const uRes: any = await api.getUserById(citizenId);
+          const user = uRes?.result?.data || uRes;
+
+          username = user.username || username;
+          level = user.leveling?.level || 1;
+
+          const wealth = user.stats?.wealth ?? {};
+          const totalWealth   = wealth.total      ?? 0;
+          const money         = wealth.money      ?? 0;
+          const companies     = wealth.companies  ?? 0;
+          const items         = wealth.items      ?? 0;
+          const equipments    = wealth.equipments ?? 0;
+          const weapons       = wealth.weapons    ?? 0;
+
+          if (user.dates?.lastConnectionAt) {
+            const lastConn = new Date(user.dates.lastConnectionAt);
             const now = new Date();
             diffHours = Math.floor((now.getTime() - lastConn.getTime()) / (1000 * 60 * 60));
             diffDays = Math.floor(diffHours / 24);
-            
-            if (diffHours < 1) {
-              lastActivityStr = 'Gerade eben';
-            } else if (diffHours < 24) {
-              lastActivityStr = `Vor ${diffHours} h`;
-            } else {
-              lastActivityStr = `Vor ${diffDays} d`;
-            }
+            if (diffHours < 1)       lastActivityStr = 'Gerade eben';
+            else if (diffHours < 24) lastActivityStr = `Vor ${diffHours} h`;
+            else                     lastActivityStr = `Vor ${diffDays} d`;
           }
 
-          const compsRes: any = await api.getCompanies(citizenId);
-          const compData = compsRes?.result?.data || compsRes;
-          const companyIds = compData.items || [];
-          
-          let totalCompanyValue = 0;
-
-          for (const cId of companyIds) {
-            try {
-              const cRes: any = await api.getCompany(cId);
-              const cDetails = cRes?.result?.data || cRes;
-              const evalue = cDetails.estimatedValue || 0;
-              totalCompanyValue += evalue;
-            } catch(e) {
-              console.error(`Error fetching company ${cId}`, e);
-            }
-          }
-
-          const liquidAssets = totalWealth - totalCompanyValue;
-          
           allCitizensData.push({
-            citizenId,
-            username,
-            level,
-            totalWealth,
-            totalCompanyValue,
-            liquidAssets,
-            lastActivityStr,
-            diffDays,
-            diffHours
+            citizenId, username, level,
+            totalWealth, money, companies, items, equipments, weapons,
+            lastActivityStr, diffDays, diffHours
           });
-
         } catch (err) {
           console.error(`Failed to process citizen ${citizenId}`, err);
         }
@@ -347,29 +331,32 @@ function finishScan(success: boolean = false) {
 }
 
 function renderData() {
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    const el = th as HTMLElement;
+    el.classList.remove('sort-asc', 'sort-desc');
+    if (el.dataset.sort === sortKey) el.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+  });
+
   resultsBody.innerHTML = '';
   let totalWealthSum = 0;
   let filteredData = [...allCitizensData];
-  
+
   const filterVal = (document.getElementById('activity-filter') as HTMLSelectElement).value;
+  if (filterVal === '24h') filteredData = filteredData.filter(c => c.diffHours < 24);
+  else if (filterVal === '3d') filteredData = filteredData.filter(c => c.diffDays <= 3);
+  else if (filterVal === '7d') filteredData = filteredData.filter(c => c.diffDays <= 7);
+  else if (filterVal === 'inactive') filteredData = filteredData.filter(c => c.diffDays > 7);
 
-  if (filterVal === '24h') {
-    filteredData = filteredData.filter(c => c.diffHours < 24);
-  } else if (filterVal === '3d') {
-    filteredData = filteredData.filter(c => c.diffDays <= 3);
-  } else if (filterVal === '7d') {
-    filteredData = filteredData.filter(c => c.diffDays <= 7);
-  } else if (filterVal === 'inactive') {
-    filteredData = filteredData.filter(c => c.diffDays > 7);
-  }
+  filteredData.sort((a, b) => {
+    const d = a[sortKey] - b[sortKey];
+    return sortAsc ? d : -d;
+  });
 
-  // Sort by liquid assets descending
-  filteredData.sort((a, b) => b.liquidAssets - a.liquidAssets);
+  const fmt = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   filteredData.forEach((c, i) => {
     totalWealthSum += c.totalWealth;
-    const liquidClass = c.liquidAssets >= 0 ? 'text-success' : 'text-danger';
-    
+
     const tr = document.createElement('tr');
     tr.className = 'citizen-row slide-up';
     tr.style.animationDelay = `${(i % 10) * 0.02}s`;
@@ -381,17 +368,18 @@ function renderData() {
             <span class="citizen-level">${c.level}</span>
           </div>
           <div class="citizen-details">
-            <div class="citizen-name-wrap">
-              <strong>${c.username}</strong>
-              <span class="activity-badge">${c.lastActivityStr}</span>
-            </div>
+            <strong>${c.username}</strong>
             <div class="id-hash">${c.citizenId.substring(0,8)}...</div>
           </div>
         </div>
       </td>
-      <td class="wealth-col font-mono">🪙 ${c.totalWealth.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-      <td class="wealth-col font-mono text-muted">🪙 ${c.totalCompanyValue.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-      <td class="wealth-col font-mono ${liquidClass} fw-bold">🪙 ${c.liquidAssets.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+      <td class="wealth-col font-mono">🪙 ${fmt(c.totalWealth)}</td>
+      <td class="wealth-col font-mono text-success">${fmt(c.money)}</td>
+      <td class="wealth-col font-mono">${fmt(c.companies)}</td>
+      <td class="wealth-col font-mono">${fmt(c.items)}</td>
+      <td class="wealth-col font-mono text-muted">${fmt(c.equipments)}</td>
+      <td class="wealth-col font-mono text-muted">${fmt(c.weapons)}</td>
+      <td class="activity-col"><span class="activity-badge">${c.lastActivityStr}</span></td>
     `;
     resultsBody.appendChild(tr);
   });
@@ -400,14 +388,78 @@ function renderData() {
   scanTextEl.innerText = `Anzeige: ${filteredData.length.toLocaleString('de-DE')} von ${allCitizensData.length.toLocaleString('de-DE')} Bürgern.`;
 
   drawHistogram(filteredData);
+  drawCompositionChart(filteredData);
   chartSection.classList.remove('hidden');
 }
 
 document.getElementById('activity-filter')?.addEventListener('change', () => {
-  if (allCitizensData.length > 0) {
-    renderData();
-  }
+  if (allCitizensData.length > 0) renderData();
 });
+
+function attachSortListeners() {
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = (th as HTMLElement).dataset.sort as SortKey;
+      if (sortKey === key) sortAsc = !sortAsc;
+      else { sortKey = key; sortAsc = false; }
+      renderData();
+    });
+  });
+}
+attachSortListeners();
+
+function drawCompositionChart(data: CitizenData[]) {
+  const tiers = [
+    { label: 'Level 1-9',   min: 1,  max: 9   },
+    { label: 'Level 10-19', min: 10, max: 19  },
+    { label: 'Level 20-29', min: 20, max: 29  },
+    { label: 'Level 30+',   min: 30, max: 999 },
+  ];
+
+  const categories: { key: keyof Pick<CitizenData, 'money'|'companies'|'items'|'equipments'|'weapons'>; label: string; color: string }[] = [
+    { key: 'money',      label: 'Bargeld',    color: 'rgba(63,185,80,0.8)'  },
+    { key: 'companies',  label: 'Firmen',     color: 'rgba(88,166,255,0.8)' },
+    { key: 'items',      label: 'Items',      color: 'rgba(168,85,247,0.8)' },
+    { key: 'equipments', label: 'Ausrüstung', color: 'rgba(234,179,8,0.8)'  },
+    { key: 'weapons',    label: 'Waffen',     color: 'rgba(248,81,73,0.8)'  },
+  ];
+
+  const datasets = categories.map(cat => ({
+    label: cat.label,
+    backgroundColor: cat.color,
+    data: tiers.map(tier =>
+      data.filter(c => c.level >= tier.min && c.level <= tier.max)
+          .reduce((sum, c) => sum + c[cat.key], 0)
+    ),
+  }));
+
+  const ctx2 = (document.getElementById('compositionChart') as HTMLCanvasElement).getContext('2d');
+  if (!ctx2) return;
+  if (compositionChart) compositionChart.destroy();
+
+  compositionChart = new Chart(ctx2, {
+    type: 'bar',
+    data: { labels: tiers.map(t => t.label), datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: '#94a3b8' } },
+        title: {
+          display: true,
+          text: 'Vermögenszusammensetzung nach Level-Tier',
+          color: '#e2e8f0',
+          font: { family: 'Inter', size: 16 },
+        },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      },
+    },
+  });
+}
 
 function drawHistogram(data: CitizenData[]) {
   const bins = [0, 100, 500, 1000, 5000, 10000, 50000, Infinity];

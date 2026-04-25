@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://api2.warera.io/trpc/country.getAllCountries?input=%7B%7D\")",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const j=JSON.parse\\(d\\); const r=j?.result?.data||j; console.log\\(JSON.stringify\\(r?.slice?.\\(0,3\\), null, 2\\)\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

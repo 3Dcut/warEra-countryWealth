@@ -95,6 +95,10 @@ export class WarEraAPI {
     return this.fetchAPI("user.getUserLite", { userId });
   }
 
+  async getUserById(userId: string) {
+    return this.fetchAPI("user.getUserById", { userId });
+  }
+
   async getCompanies(userId: string) {
     return this.fetchAPI("company.getCompanies", { userId, perPage: 100, direction: "forward" });
   }

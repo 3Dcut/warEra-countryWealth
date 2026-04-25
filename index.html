@@ -90,15 +90,16 @@
 
       <!-- Chart Area -->
       <section class="chart-section fade-in delay-2 hidden" id="chartSection">
-        <div class="glass-panel chart-container">
-          <canvas id="wealthChart"></canvas>
+        <div class="charts-row">
+          <div class="glass-panel chart-container"><canvas id="wealthChart"></canvas></div>
+          <div class="glass-panel chart-container"><canvas id="compositionChart"></canvas></div>
         </div>
       </section>
 
       <!-- Logging & Main Data Area -->
       <section class="data-section glass-panel fade-in delay-3">
         <div class="section-header">
-          <h2>Liquides Vermögen der Bürger</h2>
+          <h2>Vermögensübersicht der Bürger</h2>
           <div class="status-indicator">
             <span class="status-dot inner-glow"></span>
             <span id="scanStatusBadge" class="status-label">Bereit</span>
@@ -109,16 +110,20 @@
           <table id="resultsTable">
             <thead>
               <tr>
-                <th>Bürger-Details</th>
-                <th>Gesamtvermögen</th>
-                <th>Firmenwert</th>
-                <th>Liquides Vermögen</th>
+                <th class="col-citizen">Bürger</th>
+                <th class="wealth-col sortable" data-sort="totalWealth">Gesamt</th>
+                <th class="wealth-col sortable" data-sort="money">Bargeld</th>
+                <th class="wealth-col sortable" data-sort="companies">Firmen</th>
+                <th class="wealth-col sortable" data-sort="items">Items</th>
+                <th class="wealth-col sortable" data-sort="equipments">Ausrüstung</th>
+                <th class="wealth-col sortable" data-sort="weapons">Waffen</th>
+                <th class="col-activity">Aktivität</th>
               </tr>
             </thead>
             <tbody id="resultsBody">
               <!-- Rendered via TS -->
               <tr class="empty-state-row">
-                <td colspan="4">
+                <td colspan="8">
                   <div class="empty-state">
                     <div class="empty-icon"></div>
                     <p>Wähle ein Land und starte den Scan, um die Verteilung zu sehen.</p>
