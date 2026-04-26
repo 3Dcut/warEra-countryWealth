@@ -682,7 +682,7 @@ function updateCompareBtn() {
 
 async function scanCountryCitizens(
   countryId: string,
-  onProgress: (text: string) => void
+  onProgress: (citizensDone: number, citizensTotal: number) => void
 ): Promise<CitizenData[]> {
   const result: CitizenData[] = [];
   let citizens: any[] = [];
@@ -701,7 +701,7 @@ async function scanCountryCitizens(
     const citizen = citizens[i];
     const citizenId = citizen._id || citizen;
     let username = citizen.username || 'Unbekannt';
-    onProgress(`Bürger ${i + 1}/${citizens.length}`);
+    onProgress(i + 1, citizens.length);
 
     let level = 1, lastActivityStr = 'Unbekannt', diffHours = 9999, diffDays = 999;
     try {
@@ -758,10 +758,10 @@ document.getElementById('compareStartBtn')?.addEventListener('click', async () =
   let done = 0;
 
   for (const { group, country } of allWork) {
-    progressEl.innerText = `Scanne ${country.name}... (${done + 1}/${total} Länder)`;
-    progressBar.style.width = `${(done / total) * 100}%`;
-    const citizens = await scanCountryCitizens(country.id, text => {
-      progressEl.innerText = `${country.name}: ${text} (Land ${done + 1}/${total})`;
+    const citizens = await scanCountryCitizens(country.id, (citizensDone, citizensTotal) => {
+      const pct = ((done + citizensDone / citizensTotal) / total) * 100;
+      progressBar.style.width = `${pct.toFixed(1)}%`;
+      progressEl.innerText = `${country.name}: Bürger ${citizensDone}/${citizensTotal} · Land ${done + 1}/${total}`;
     });
     group.citizens.push(...citizens);
     done++;
