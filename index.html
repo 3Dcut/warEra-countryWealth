@@ -59,8 +59,14 @@
         </div>
       </header>
 
+      <!-- Mode Tabs -->
+      <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="single">⚡ Einzelscan</button>
+        <button class="mode-tab" data-mode="compare">⚖️ Ländervergleich</button>
+      </div>
+
       <!-- Dashboard Stats -->
-      <section class="stats-grid fade-in delay-1">
+      <section class="stats-grid fade-in delay-1 single-mode-section">
         <div class="stat-card glass-panel">
           <div class="stat-icon treasury-icon"></div>
           <div class="stat-content">
@@ -97,7 +103,7 @@
       </section>
 
       <!-- Logging & Main Data Area -->
-      <section class="data-section glass-panel fade-in delay-3">
+      <section class="data-section glass-panel fade-in delay-3 single-mode-section">
         <div class="section-header">
           <h2>Vermögensübersicht der Bürger</h2>
           <div class="status-indicator">
@@ -106,17 +112,27 @@
           </div>
         </div>
         
+        <!-- Column visibility filter -->
+        <div class="column-filter-bar">
+          <span class="column-filter-label">Spalten:</span>
+          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="money" checked> Bargeld</label>
+          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="companies" checked> Firmen</label>
+          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="items" checked> Items</label>
+          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="equipments" checked> Ausrüstung</label>
+          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="weapons" checked> Waffen</label>
+        </div>
+
         <div class="table-wrapper">
           <table id="resultsTable">
             <thead>
               <tr>
                 <th class="col-citizen">Bürger</th>
                 <th class="wealth-col sortable" data-sort="totalWealth">Gesamt</th>
-                <th class="wealth-col sortable" data-sort="money">Bargeld</th>
-                <th class="wealth-col sortable" data-sort="companies">Firmen</th>
-                <th class="wealth-col sortable" data-sort="items">Items</th>
-                <th class="wealth-col sortable" data-sort="equipments">Ausrüstung</th>
-                <th class="wealth-col sortable" data-sort="weapons">Waffen</th>
+                <th class="wealth-col sortable col-money" data-sort="money">Bargeld</th>
+                <th class="wealth-col sortable col-companies" data-sort="companies">Firmen</th>
+                <th class="wealth-col sortable col-items" data-sort="items">Items</th>
+                <th class="wealth-col sortable col-equipments" data-sort="equipments">Ausrüstung</th>
+                <th class="wealth-col sortable col-weapons" data-sort="weapons">Waffen</th>
                 <th class="col-activity">Aktivität</th>
               </tr>
             </thead>
@@ -132,6 +148,72 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- Compare Section -->
+      <section class="compare-section glass-panel hidden" id="compareSection">
+        <div class="section-header">
+          <h2>Ländervergleich</h2>
+          <div class="compare-progress hidden" id="compareProgressWrapper">
+            <div class="progress-bar-container" style="width:280px">
+              <div class="progress-bar glow-bar" id="compareProgressBar" style="width:0%"></div>
+            </div>
+            <div class="progress-text" id="compareProgress"></div>
+          </div>
+        </div>
+
+        <div class="compare-groups">
+          <!-- Left Group -->
+          <div class="compare-group glass-panel">
+            <div class="group-header">
+              <input type="text" id="leftGroupName" class="group-name-input" value="Gruppe A" placeholder="Gruppenname...">
+              <span id="leftCount" class="group-count">0 Länder</span>
+            </div>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="leftSearch" placeholder="Land suchen..." autocomplete="off">
+              <div id="leftDropdown" class="autocomplete-dropdown hidden"></div>
+            </div>
+            <button class="add-country-btn" id="leftAddBtn" type="button">+ Hinzufügen</button>
+            <div class="chips-container" id="leftChips"></div>
+          </div>
+
+          <div class="compare-vs">VS</div>
+
+          <!-- Right Group -->
+          <div class="compare-group glass-panel">
+            <div class="group-header">
+              <input type="text" id="rightGroupName" class="group-name-input" value="Gruppe B" placeholder="Gruppenname...">
+              <span id="rightCount" class="group-count">0 Länder</span>
+            </div>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="rightSearch" placeholder="Land suchen..." autocomplete="off">
+              <div id="rightDropdown" class="autocomplete-dropdown hidden"></div>
+            </div>
+            <button class="add-country-btn" id="rightAddBtn" type="button">+ Hinzufügen</button>
+            <div class="chips-container" id="rightChips"></div>
+          </div>
+        </div>
+
+        <div class="compare-actions">
+          <button class="primary-btn" id="compareStartBtn" type="button" disabled>Vergleich starten</button>
+        </div>
+
+        <!-- Compare Results -->
+        <div id="compareResults" class="hidden">
+          <div class="compare-results-grid">
+            <div class="compare-result-col glass-panel">
+              <h3 id="compareLeftName">Gruppe A</h3>
+              <div id="leftGroupStats" class="compare-stats"></div>
+            </div>
+            <div class="compare-result-col glass-panel">
+              <h3 id="compareRightName">Gruppe B</h3>
+              <div id="rightGroupStats" class="compare-stats"></div>
+            </div>
+          </div>
+          <div class="glass-panel compare-chart-container">
+            <canvas id="compareChart"></canvas>
+          </div>
         </div>
       </section>
 
