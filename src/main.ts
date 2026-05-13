@@ -390,6 +390,7 @@ function getActiveCategories(): Set<string> {
 }
 
 function reapplyFilters() {
+  console.log('[reapplyFilters] single=', allCitizensData.length, 'left=', leftGroup.citizens.length, 'right=', rightGroup.citizens.length);
   if (allCitizensData.length > 0) renderData();
   if (leftGroup.citizens.length > 0 || rightGroup.citizens.length > 0) renderComparison();
 }
@@ -864,6 +865,7 @@ function renderComparison() {
   const activeCats = getActiveCategories();
   const leftFiltered  = applySharedFilters(leftGroup.citizens);
   const rightFiltered = applySharedFilters(rightGroup.citizens);
+  console.log('[renderComparison] activeCats=', [...activeCats], 'left raw=', leftGroup.citizens.length, '→filtered=', leftFiltered.length, 'right raw=', rightGroup.citizens.length, '→filtered=', rightFiltered.length);
   const leftAgg  = aggregateGroup(leftFiltered, activeCats);
   const rightAgg = aggregateGroup(rightFiltered, activeCats);
 
