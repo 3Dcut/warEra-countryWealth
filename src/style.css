@@ -571,6 +571,44 @@ td {
 .mode-tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
 .mode-tab.active { background: var(--accent-base); color: #fff; }
 
+/* ---- Scan-Button-Gruppe + Refresh ---- */
+.scan-btn-group {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+.icon-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--accent-base);
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--anim-speed);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+}
+.icon-btn:hover:not(:disabled) {
+  background: rgba(88,166,255,0.15);
+  border-color: var(--accent-base);
+  transform: rotate(45deg);
+}
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---- Compare: Force-Refresh-Checkbox ---- */
+.compare-actions {
+  align-items: center;
+  gap: 1.5rem;
+}
+.compare-force-refresh {
+  font-size: 0.85rem;
+}
+
 /* ---- Zentraler Filterbereich ---- */
 .filter-panel {
   padding: 1.25rem 1.75rem;

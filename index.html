@@ -43,9 +43,12 @@
             <label for="apiKey2">API-Schlüssel 2 (Optional – Rotation)</label>
             <input type="password" id="apiKey2" placeholder="Zweiter Key für automatischen Wechsel">
           </div>
-          <button id="startBtn" class="primary-btn pulse-glow" disabled>
-            <span class="btn-text">Land auswählen</span>
-          </button>
+          <div class="scan-btn-group">
+            <button id="startBtn" class="primary-btn pulse-glow" disabled>
+              <span class="btn-text">Land auswählen</span>
+            </button>
+            <button id="refreshBtn" class="icon-btn hidden" type="button" title="Cache umgehen und neu scannen">↻</button>
+          </div>
         </div>
       </header>
 
@@ -56,7 +59,7 @@
       </div>
 
       <!-- Zentraler Filterbereich -->
-      <section class="filter-panel glass-panel single-mode-section" id="filterPanel">
+      <section class="filter-panel glass-panel" id="filterPanel">
         <div class="filter-row">
           <div class="filter-group">
             <label class="filter-label">Kategorien</label>
@@ -211,6 +214,9 @@
         </div>
 
         <div class="compare-actions">
+          <label class="cb-label compare-force-refresh">
+            <input type="checkbox" id="compareForceRefresh"> Cache umgehen (neu scannen)
+          </label>
           <button class="primary-btn" id="compareStartBtn" type="button" disabled>Vergleich starten</button>
         </div>
 

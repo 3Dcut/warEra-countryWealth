@@ -10,6 +10,7 @@ const apiKeyInput = document.getElementById('apiKey') as HTMLInputElement;
 const apiKey2Input = document.getElementById('apiKey2') as HTMLInputElement;
 const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
 const btnText = startBtn.querySelector('.btn-text') as HTMLElement;
+const refreshBtn = document.getElementById('refreshBtn') as HTMLButtonElement;
 
 const totalCitizensWealthEl = document.getElementById('totalCitizensWealth') as HTMLElement;
 const citizensCountEl = document.getElementById('citizensCount') as HTMLElement;
@@ -42,6 +43,35 @@ let countries: any[] = [];
 let wealthChart: Chart | null = null;
 let compositionChart: Chart | null = null;
 
+// ---- Country-Cache (24h) ----
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const cacheKey = (countryId: string) => `wealth-cache:${countryId}`;
+interface CountryCache { timestamp: number; citizens: CitizenData[]; }
+
+function loadCache(countryId: string): CountryCache | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(countryId));
+    if (!raw) return null;
+    const cache: CountryCache = JSON.parse(raw);
+    if (Date.now() - cache.timestamp > CACHE_TTL_MS) {
+      localStorage.removeItem(cacheKey(countryId));
+      return null;
+    }
+    return cache;
+  } catch { return null; }
+}
+function saveCache(countryId: string, citizens: CitizenData[]) {
+  try {
+    localStorage.setItem(cacheKey(countryId), JSON.stringify({ timestamp: Date.now(), citizens }));
+  } catch (e) { console.warn('Cache-Speicherung fehlgeschlagen', e); }
+}
+function formatCacheAge(ms: number): string {
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `vor ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  return `vor ${hrs} h ${mins % 60} min`;
+}
+
 type SortKey = 'totalWealth' | 'money' | 'companies' | 'items' | 'equipments' | 'weapons';
 let sortKey: SortKey = 'totalWealth';
 let sortAsc = false;
@@ -59,6 +89,21 @@ interface CitizenData {
   lastActivityStr: string;
   diffDays: number;
   diffHours: number;
+  lastConnectionAt: string | null;
+}
+
+function recomputeActivity(c: CitizenData) {
+  if (!c.lastConnectionAt) {
+    c.diffHours = 9999; c.diffDays = 999; c.lastActivityStr = 'Unbekannt';
+    return;
+  }
+  const lastConn = new Date(c.lastConnectionAt).getTime();
+  const now = Date.now();
+  c.diffHours = Math.floor((now - lastConn) / (1000 * 60 * 60));
+  c.diffDays = Math.floor(c.diffHours / 24);
+  if (c.diffHours < 1) c.lastActivityStr = 'Gerade eben';
+  else if (c.diffHours < 24) c.lastActivityStr = `Vor ${c.diffHours} h`;
+  else c.lastActivityStr = `Vor ${c.diffDays} d`;
 }
 let allCitizensData: CitizenData[] = [];
 
@@ -119,6 +164,7 @@ function selectCountry(country: any) {
   startBtn.disabled = false;
   btnText.innerText = 'Scan starten';
   startBtn.classList.add('ready');
+  refreshBtn?.classList.remove('hidden');
 }
 
 function setupManualFallback() {
@@ -129,10 +175,12 @@ function setupManualFallback() {
       startBtn.disabled = false;
       btnText.innerText = 'Scan starten';
       startBtn.classList.add('ready');
+      refreshBtn?.classList.remove('hidden');
     } else {
       startBtn.disabled = true;
       btnText.innerText = 'Land auswählen';
       startBtn.classList.remove('ready');
+      refreshBtn?.classList.add('hidden');
     }
   });
 }
@@ -146,6 +194,7 @@ countrySearchInput.addEventListener('input', (e) => {
     startBtn.disabled = true;
     btnText.innerText = 'Land auswählen';
     startBtn.classList.remove('ready');
+    refreshBtn?.classList.add('hidden');
     return;
   }
 
@@ -172,26 +221,27 @@ countrySearchInput.addEventListener('focus', () => {
 
 
 // Scanning Logic
-startBtn.addEventListener('click', async () => {
+async function runSingleScan(forceRefresh: boolean) {
   if (isScanning) return;
   const countryId = countryIdHidden.value.trim();
   if (!countryId) return alert('Bitte wähle ein Land aus der Liste oder gib eine gültige ID ein.');
 
   isScanning = true;
   startBtn.disabled = true;
+  refreshBtn.disabled = true;
   startBtn.classList.remove('ready');
-  btnText.innerText = 'Scanne...';
-  
+  btnText.innerText = forceRefresh ? 'Neu-Scan...' : 'Scanne...';
+
   scanStatusBadge.innerText = 'Scanne';
   scanStatusBadge.className = 'status-label text-warning';
   statusDot.className = 'status-dot warning inner-glow glow-pulse';
-  
+
   resultsBody.innerHTML = '';
   chartSection.classList.add('hidden');
   if (wealthChart) wealthChart.destroy();
   if (compositionChart) compositionChart.destroy();
   allCitizensData = [];
-  
+
   scanProgressEl.style.width = '0%';
   scanTextEl.innerText = 'Initialisiere sichere Verbindung...';
 
@@ -201,121 +251,52 @@ startBtn.addEventListener('click', async () => {
   };
 
   try {
-    // 1. Fetch Country details (optional, ignoring errors)
-    try {
-      await api.getCountry(countryId);
-    } catch(e) {
-      console.warn("Could not fetch country details, ignoring.", e);
-    }
-    
+    try { await api.getCountry(countryId); } catch (e) { console.warn('Country-Details ignoriert.', e); }
     totalCitizensWealthEl.innerHTML = `<span class="currency-symbol">🪙</span>0`;
 
-    // 2. Fetch All Citizens
-    scanTextEl.innerText = 'Erstelle Bürger-Register...';
-    let citizens: any[] = [];
-    let cursor = undefined;
-    
-    while (true) {
-      const usersRes: any = await api.getUsersByCountry(countryId, cursor);
-      const data = usersRes?.result?.data || usersRes;
-      if (!data || !data.items) break;
-      
-      citizens = citizens.concat(data.items);
-      cursor = data.nextCursor;
-      if (!cursor) break;
-    }
+    const startTime = Date.now();
+    allCitizensData = await scanCountryCitizens(countryId, (info) => {
+      citizensCountEl.innerText = info.total.toLocaleString('de-DE');
+      if (info.source === 'cache') {
+        scanProgressEl.style.width = '100%';
+        scanTextEl.innerText = `Aus Cache geladen (${formatCacheAge(info.ageMs)}) · ${info.total} Bürger`;
+      } else {
+        scanProgressEl.style.width = `${(info.done / Math.max(1, info.total)) * 100}%`;
+        const elapsed = Date.now() - startTime;
+        const avg = info.done > 0 ? elapsed / info.done : 0;
+        const etaMs = avg * (info.total - info.done);
+        let etaStr = '';
+        if (info.done > 0) {
+          const s = Math.round(etaMs / 1000);
+          etaStr = s < 60 ? ` (ETA: ~${s}s)` : ` (ETA: ~${Math.floor(s / 60)}m ${s % 60}s)`;
+        }
+        scanTextEl.innerText = `Analysiere Bürger ${info.done}/${info.total}${etaStr}`;
+      }
+    }, forceRefresh);
 
-    citizensCountEl.innerText = citizens.length.toLocaleString();
-    
-    if (citizens.length === 0) {
-      scanTextEl.innerText = 'Keine Bürger-Einträge im Register gefunden.';
+    if (allCitizensData.length === 0) {
+      scanTextEl.innerText = 'Keine Bürger-Einträge gefunden.';
       finishScan();
       return;
     }
 
-    // 3. Process Citizens
-    const startTime = Date.now();
-    for (let i = 0; i < citizens.length; i++) {
-      const citizen = citizens[i];
-      const citizenId = citizen._id || citizen;
-      let username = citizen.username || 'Verschlüsselte Identität';
-
-      const elapsed = Date.now() - startTime;
-      const avgTimePerCitizen = i === 0 ? 0 : elapsed / i;
-      const remainingCitizens = citizens.length - i;
-      const etaMs = avgTimePerCitizen * remainingCitizens;
-      
-      let etaStr = '';
-      if (i > 0) {
-         const etaSeconds = Math.round(etaMs / 1000);
-         if (etaSeconds < 60) {
-             etaStr = ` (ETA: ~${etaSeconds}s)`;
-         } else {
-             const m = Math.floor(etaSeconds / 60);
-             const s = etaSeconds % 60;
-             etaStr = ` (ETA: ~${m}m ${s}s)`;
-         }
-      }
-
-      scanTextEl.innerText = `Analysiere Bürger ${i+1}/${citizens.length}${etaStr}`;
-      scanProgressEl.style.width = `${((i+1)/citizens.length)*100}%`;
-
-        let level = 1;
-        let lastActivityStr = 'Unbekannt';
-        let diffHours = 9999;
-        let diffDays = 999;
-
-        try {
-          const uRes: any = await api.getUserById(citizenId);
-          const user = uRes?.result?.data || uRes;
-
-          username = user.username || username;
-          level = user.leveling?.level || 1;
-
-          const wealth = user.stats?.wealth ?? {};
-          const totalWealth   = wealth.total      ?? 0;
-          const money         = wealth.money      ?? 0;
-          const companies     = wealth.companies  ?? 0;
-          const items         = wealth.items      ?? 0;
-          const equipments    = wealth.equipments ?? 0;
-          const weapons       = wealth.weapons    ?? 0;
-
-          if (user.dates?.lastConnectionAt) {
-            const lastConn = new Date(user.dates.lastConnectionAt);
-            const now = new Date();
-            diffHours = Math.floor((now.getTime() - lastConn.getTime()) / (1000 * 60 * 60));
-            diffDays = Math.floor(diffHours / 24);
-            if (diffHours < 1)       lastActivityStr = 'Gerade eben';
-            else if (diffHours < 24) lastActivityStr = `Vor ${diffHours} h`;
-            else                     lastActivityStr = `Vor ${diffDays} d`;
-          }
-
-          allCitizensData.push({
-            citizenId, username, level,
-            totalWealth, money, companies, items, equipments, weapons,
-            lastActivityStr, diffDays, diffHours
-          });
-        } catch (err) {
-          console.error(`Failed to process citizen ${citizenId}`, err);
-        }
-    }
-
-    scanTextEl.innerText = `Scan abgeschlossen: ${citizens.length.toLocaleString('de-DE')} Identitäten entschlüsselt. Rendere Daten...`;
-    
     renderData();
     finishScan(true);
-
   } catch (err: any) {
     console.error(err);
     alert(err.message);
     scanTextEl.innerText = 'Systemfehler: Scan abgebrochen.';
     finishScan(false);
   }
-});
+}
+
+startBtn.addEventListener('click', () => runSingleScan(false));
+refreshBtn?.addEventListener('click', () => runSingleScan(true));
 
 function finishScan(success: boolean = false) {
   isScanning = false;
   startBtn.disabled = false;
+  refreshBtn.disabled = false;
   startBtn.classList.add('ready');
   btnText.innerText = 'Land erneut scannen';
   
@@ -339,23 +320,7 @@ function renderData() {
 
   resultsBody.innerHTML = '';
   let totalWealthSum = 0;
-  let filteredData = [...allCitizensData];
-
-  const filterVal = (document.getElementById('activity-filter') as HTMLSelectElement).value;
-  if (filterVal === '24h') filteredData = filteredData.filter(c => c.diffHours < 24);
-  else if (filterVal === '3d') filteredData = filteredData.filter(c => c.diffDays <= 3);
-  else if (filterVal === '7d') filteredData = filteredData.filter(c => c.diffDays <= 7);
-  else if (filterVal === 'inactive') filteredData = filteredData.filter(c => c.diffDays > 7);
-
-  // Level-Range-Filter
-  const lvlMinEl = document.getElementById('levelMin') as HTMLInputElement | null;
-  const lvlMaxEl = document.getElementById('levelMax') as HTMLInputElement | null;
-  if (lvlMinEl && lvlMaxEl) {
-    let lvlMin = parseInt(lvlMinEl.value, 10);
-    let lvlMax = parseInt(lvlMaxEl.value, 10);
-    if (lvlMin > lvlMax) [lvlMin, lvlMax] = [lvlMax, lvlMin];
-    filteredData = filteredData.filter(c => c.level >= lvlMin && c.level <= lvlMax);
-  }
+  let filteredData = applySharedFilters(allCitizensData);
 
   // Kategorie-Filter: bestimmt totalWealth + Anzeige
   const activeCats = getActiveCategories();
@@ -424,9 +389,12 @@ function getActiveCategories(): Set<string> {
   return set;
 }
 
-document.getElementById('activity-filter')?.addEventListener('change', () => {
+function reapplyFilters() {
   if (allCitizensData.length > 0) renderData();
-});
+  if (leftGroup.citizens.length > 0 || rightGroup.citizens.length > 0) renderComparison();
+}
+
+document.getElementById('activity-filter')?.addEventListener('change', reapplyFilters);
 
 function attachSortListeners() {
   document.querySelectorAll('th[data-sort]').forEach(th => {
@@ -451,8 +419,8 @@ function applyCategoryVisibility() {
 }
 document.querySelectorAll('.cat-toggle').forEach(cb => {
   cb.addEventListener('change', () => {
-    if (allCitizensData.length > 0) renderData();
-    else applyCategoryVisibility();
+    applyCategoryVisibility();
+    reapplyFilters();
   });
 });
 
@@ -470,7 +438,7 @@ function syncLevelLabel() {
 [levelMinSlider, levelMaxSlider].forEach(s => {
   s?.addEventListener('input', () => {
     syncLevelLabel();
-    if (allCitizensData.length > 0) renderData();
+    reapplyFilters();
   });
 });
 syncLevelLabel();
@@ -732,10 +700,24 @@ function updateCompareBtn() {
   btn.classList.toggle('ready', canCompare);
 }
 
+type ScanProgress =
+  | { source: 'cache'; ageMs: number; done: number; total: number }
+  | { source: 'live'; done: number; total: number };
+
 async function scanCountryCitizens(
   countryId: string,
-  onProgress: (citizensDone: number, citizensTotal: number) => void
+  onProgress: (info: ScanProgress) => void,
+  forceRefresh = false
 ): Promise<CitizenData[]> {
+  if (!forceRefresh) {
+    const cached = loadCache(countryId);
+    if (cached) {
+      cached.citizens.forEach(recomputeActivity);
+      onProgress({ source: 'cache', ageMs: Date.now() - cached.timestamp, done: cached.citizens.length, total: cached.citizens.length });
+      return cached.citizens;
+    }
+  }
+
   const result: CitizenData[] = [];
   let citizens: any[] = [];
   let cursor: string | undefined;
@@ -749,37 +731,46 @@ async function scanCountryCitizens(
     if (!cursor) break;
   }
 
-  for (let i = 0; i < citizens.length; i++) {
-    const citizen = citizens[i];
-    const citizenId = citizen._id || citizen;
-    let username = citizen.username || 'Unbekannt';
-    onProgress(i + 1, citizens.length);
+  // Parallel-Pool: API-Wrapper drosselt automatisch bei 429 via Key-Rotation/Retry.
+  const CONCURRENCY = 8;
+  const slots: (CitizenData | null)[] = new Array(citizens.length).fill(null);
+  let next = 0;
+  let done = 0;
 
-    let level = 1, lastActivityStr = 'Unbekannt', diffHours = 9999, diffDays = 999;
-    try {
-      const uRes: any = await api.getUserById(citizenId);
-      const user = uRes?.result?.data || uRes;
-      username = user.username || username;
-      level = user.leveling?.level || 1;
-      const wealth = user.stats?.wealth ?? {};
-      if (user.dates?.lastConnectionAt) {
-        const lastConn = new Date(user.dates.lastConnectionAt);
-        const now = new Date();
-        diffHours = Math.floor((now.getTime() - lastConn.getTime()) / (1000 * 60 * 60));
-        diffDays = Math.floor(diffHours / 24);
-        if (diffHours < 1) lastActivityStr = 'Gerade eben';
-        else if (diffHours < 24) lastActivityStr = `Vor ${diffHours} h`;
-        else lastActivityStr = `Vor ${diffDays} d`;
-      }
-      result.push({
-        citizenId, username, level,
-        totalWealth: wealth.total ?? 0, money: wealth.money ?? 0,
-        companies: wealth.companies ?? 0, items: wealth.items ?? 0,
-        equipments: wealth.equipments ?? 0, weapons: wealth.weapons ?? 0,
-        lastActivityStr, diffDays, diffHours
-      });
-    } catch (err) { console.error(`Failed citizen ${citizenId}`, err); }
+  async function worker() {
+    while (true) {
+      const i = next++;
+      if (i >= citizens.length) return;
+      const citizen = citizens[i];
+      const citizenId = citizen._id || citizen;
+      let username = citizen.username || 'Unbekannt';
+      try {
+        const uRes: any = await api.getUserById(citizenId);
+        const user = uRes?.result?.data || uRes;
+        username = user.username || username;
+        const level = user.leveling?.level || 1;
+        const wealth = user.stats?.wealth ?? {};
+        const lastConnectionAt = user.dates?.lastConnectionAt ?? null;
+        const c: CitizenData = {
+          citizenId, username, level,
+          totalWealth: wealth.total ?? 0, money: wealth.money ?? 0,
+          companies: wealth.companies ?? 0, items: wealth.items ?? 0,
+          equipments: wealth.equipments ?? 0, weapons: wealth.weapons ?? 0,
+          lastActivityStr: 'Unbekannt', diffDays: 999, diffHours: 9999,
+          lastConnectionAt,
+        };
+        recomputeActivity(c);
+        slots[i] = c;
+      } catch (err) { console.error(`Failed citizen ${citizenId}`, err); }
+      done++;
+      onProgress({ source: 'live', done, total: citizens.length });
+    }
   }
+
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, citizens.length) }, worker));
+  for (const c of slots) if (c) result.push(c);
+
+  saveCache(countryId, result);
   return result;
 }
 
@@ -809,12 +800,18 @@ document.getElementById('compareStartBtn')?.addEventListener('click', async () =
   const total = allWork.length;
   let done = 0;
 
+  const forceRefresh = (document.getElementById('compareForceRefresh') as HTMLInputElement)?.checked ?? false;
+
   for (const { group, country } of allWork) {
-    const citizens = await scanCountryCitizens(country.id, (citizensDone, citizensTotal) => {
-      const pct = ((done + citizensDone / citizensTotal) / total) * 100;
+    const citizens = await scanCountryCitizens(country.id, (info) => {
+      const pct = ((done + info.done / Math.max(1, info.total)) / total) * 100;
       progressBar.style.width = `${pct.toFixed(1)}%`;
-      progressEl.innerText = `${country.name}: Bürger ${citizensDone}/${citizensTotal} · Land ${done + 1}/${total}`;
-    });
+      if (info.source === 'cache') {
+        progressEl.innerText = `${country.name}: Cache ${formatCacheAge(info.ageMs)} · ${info.total} Bürger · Land ${done + 1}/${total}`;
+      } else {
+        progressEl.innerText = `${country.name}: Bürger ${info.done}/${info.total} · Land ${done + 1}/${total}`;
+      }
+    }, forceRefresh);
     group.citizens.push(...citizens);
     done++;
   }
@@ -827,22 +824,48 @@ document.getElementById('compareStartBtn')?.addEventListener('click', async () =
   updateCompareBtn();
 });
 
-function aggregateGroup(citizens: CitizenData[]) {
+function applySharedFilters(citizens: CitizenData[]): CitizenData[] {
+  let data = citizens;
+
+  const filterVal = (document.getElementById('activity-filter') as HTMLSelectElement | null)?.value ?? 'all';
+  if (filterVal === '24h') data = data.filter(c => c.diffHours < 24);
+  else if (filterVal === '3d') data = data.filter(c => c.diffDays <= 3);
+  else if (filterVal === '7d') data = data.filter(c => c.diffDays <= 7);
+  else if (filterVal === 'inactive') data = data.filter(c => c.diffDays > 7);
+
+  const lvlMinEl = document.getElementById('levelMin') as HTMLInputElement | null;
+  const lvlMaxEl = document.getElementById('levelMax') as HTMLInputElement | null;
+  if (lvlMinEl && lvlMaxEl) {
+    let lvlMin = parseInt(lvlMinEl.value, 10);
+    let lvlMax = parseInt(lvlMaxEl.value, 10);
+    if (lvlMin > lvlMax) [lvlMin, lvlMax] = [lvlMax, lvlMin];
+    data = data.filter(c => c.level >= lvlMin && c.level <= lvlMax);
+  }
+  return data;
+}
+
+function aggregateGroup(citizens: CitizenData[], activeCats: Set<string>) {
+  const sumCat = (key: keyof CitizenData) =>
+    activeCats.has(key as string) ? citizens.reduce((s, c) => s + (c[key] as number), 0) : 0;
+  const money = sumCat('money');
+  const companies = sumCat('companies');
+  const items = sumCat('items');
+  const equipments = sumCat('equipments');
+  const weapons = sumCat('weapons');
   return {
-    count:       citizens.length,
-    totalWealth: citizens.reduce((s, c) => s + c.totalWealth, 0),
-    money:       citizens.reduce((s, c) => s + c.money, 0),
-    companies:   citizens.reduce((s, c) => s + c.companies, 0),
-    items:       citizens.reduce((s, c) => s + c.items, 0),
-    equipments:  citizens.reduce((s, c) => s + c.equipments, 0),
-    weapons:     citizens.reduce((s, c) => s + c.weapons, 0),
+    count: citizens.length,
+    totalWealth: money + companies + items + equipments + weapons,
+    money, companies, items, equipments, weapons,
   };
 }
 
 function renderComparison() {
   const fmt = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const leftAgg  = aggregateGroup(leftGroup.citizens);
-  const rightAgg = aggregateGroup(rightGroup.citizens);
+  const activeCats = getActiveCategories();
+  const leftFiltered  = applySharedFilters(leftGroup.citizens);
+  const rightFiltered = applySharedFilters(rightGroup.citizens);
+  const leftAgg  = aggregateGroup(leftFiltered, activeCats);
+  const rightAgg = aggregateGroup(rightFiltered, activeCats);
 
   const lNameEl = document.getElementById('compareLeftName');
   const rNameEl = document.getElementById('compareRightName');
@@ -850,15 +873,16 @@ function renderComparison() {
   if (rNameEl) rNameEl.innerText = rightGroup.name;
 
   type Agg = ReturnType<typeof aggregateGroup>;
-  const fields: { key: keyof Agg; label: string; currency: boolean }[] = [
-    { key: 'count',       label: 'Bürger',     currency: false },
+  const allFields: { key: keyof Agg; label: string; currency: boolean; cat?: string }[] = [
+    { key: 'count',       label: 'Bürger',      currency: false },
     { key: 'totalWealth', label: 'Gesamt',      currency: true  },
-    { key: 'money',       label: 'Bargeld',     currency: true  },
-    { key: 'companies',   label: 'Firmen',      currency: true  },
-    { key: 'items',       label: 'Items',       currency: true  },
-    { key: 'equipments',  label: 'Ausrüstung',  currency: true  },
-    { key: 'weapons',     label: 'Waffen',      currency: true  },
+    { key: 'money',       label: 'Bargeld',     currency: true, cat: 'money'      },
+    { key: 'companies',   label: 'Firmen',      currency: true, cat: 'companies'  },
+    { key: 'items',       label: 'Items',       currency: true, cat: 'items'      },
+    { key: 'equipments',  label: 'Ausrüstung',  currency: true, cat: 'equipments' },
+    { key: 'weapons',     label: 'Waffen',      currency: true, cat: 'weapons'    },
   ];
+  const fields = allFields.filter(f => !f.cat || activeCats.has(f.cat));
 
   function buildStats(elId: string, agg: Agg, vs: Agg) {
     const el = document.getElementById(elId);
@@ -887,17 +911,18 @@ function renderComparison() {
   }
   buildStats('leftGroupStats',  leftAgg,  rightAgg);
   buildStats('rightGroupStats', rightAgg, leftAgg);
-  drawComparisonChart(leftAgg, rightAgg);
+  drawComparisonChart(leftAgg, rightAgg, activeCats);
 }
 
-function drawComparisonChart(left: ReturnType<typeof aggregateGroup>, right: ReturnType<typeof aggregateGroup>) {
-  const categories: { key: keyof typeof left; label: string }[] = [
+function drawComparisonChart(left: ReturnType<typeof aggregateGroup>, right: ReturnType<typeof aggregateGroup>, activeCats: Set<string>) {
+  const allCategories: { key: keyof typeof left; label: string }[] = [
     { key: 'money',      label: 'Bargeld'    },
     { key: 'companies',  label: 'Firmen'     },
     { key: 'items',      label: 'Items'      },
     { key: 'equipments', label: 'Ausrüstung' },
     { key: 'weapons',    label: 'Waffen'     },
   ];
+  const categories = allCategories.filter(c => activeCats.has(c.key as string));
   const ctx = (document.getElementById('compareChart') as HTMLCanvasElement)?.getContext('2d');
   if (!ctx) return;
   if (compareChart) compareChart.destroy();
