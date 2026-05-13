@@ -32,16 +32,6 @@
             </div>
           </div>
           <div class="input-group">
-            <label for="activity-filter">Letzter Login Filter</label>
-            <select id="activity-filter" style="background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1.2rem; border-radius: 8px; font-size: 1rem; font-family: var(--font-body); outline: none;">
-              <option value="all">Alle Bürger</option>
-              <option value="24h">Letzte 24 Stunden</option>
-              <option value="3d">Letzte 3 Tage</option>
-              <option value="7d">Letzte 7 Tage</option>
-              <option value="inactive">Inaktiv (> 7 Tage)</option>
-            </select>
-          </div>
-          <div class="input-group">
             <!-- Hidden input to store selected ID -->
             <input type="hidden" id="countryId">
           </div>
@@ -64,6 +54,41 @@
         <button class="mode-tab active" data-mode="single">⚡ Einzelscan</button>
         <button class="mode-tab" data-mode="compare">⚖️ Ländervergleich</button>
       </div>
+
+      <!-- Zentraler Filterbereich -->
+      <section class="filter-panel glass-panel single-mode-section" id="filterPanel">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label class="filter-label">Kategorien</label>
+            <div class="category-filters">
+              <label class="cb-label"><input type="checkbox" class="cat-toggle" data-cat="money" checked> Bargeld</label>
+              <label class="cb-label"><input type="checkbox" class="cat-toggle" data-cat="companies" checked> Firmen</label>
+              <label class="cb-label"><input type="checkbox" class="cat-toggle" data-cat="items" checked> Items</label>
+              <label class="cb-label"><input type="checkbox" class="cat-toggle" data-cat="equipments" checked> Ausrüstung</label>
+              <label class="cb-label"><input type="checkbox" class="cat-toggle" data-cat="weapons" checked> Waffen</label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <label class="filter-label" for="activity-filter">Letzter Login</label>
+            <select id="activity-filter">
+              <option value="all">Alle Bürger</option>
+              <option value="24h">Letzte 24 Stunden</option>
+              <option value="3d">Letzte 3 Tage</option>
+              <option value="7d">Letzte 7 Tage</option>
+              <option value="inactive">Inaktiv (> 7 Tage)</option>
+            </select>
+          </div>
+
+          <div class="filter-group level-group">
+            <label class="filter-label">Level <span id="levelRangeLabel">1 – 50</span></label>
+            <div class="range-slider">
+              <input type="range" id="levelMin" min="1" max="50" value="1">
+              <input type="range" id="levelMax" min="1" max="50" value="50">
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- Dashboard Stats -->
       <section class="stats-grid fade-in delay-1 single-mode-section">
@@ -112,16 +137,6 @@
           </div>
         </div>
         
-        <!-- Column visibility filter -->
-        <div class="column-filter-bar">
-          <span class="column-filter-label">Spalten:</span>
-          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="money" checked> Bargeld</label>
-          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="companies" checked> Firmen</label>
-          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="items" checked> Items</label>
-          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="equipments" checked> Ausrüstung</label>
-          <label class="cb-label"><input type="checkbox" class="col-toggle" data-col="weapons" checked> Waffen</label>
-        </div>
-
         <div class="table-wrapper">
           <table id="resultsTable">
             <thead>

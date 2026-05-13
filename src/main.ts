@@ -347,6 +347,28 @@ function renderData() {
   else if (filterVal === '7d') filteredData = filteredData.filter(c => c.diffDays <= 7);
   else if (filterVal === 'inactive') filteredData = filteredData.filter(c => c.diffDays > 7);
 
+  // Level-Range-Filter
+  const lvlMinEl = document.getElementById('levelMin') as HTMLInputElement | null;
+  const lvlMaxEl = document.getElementById('levelMax') as HTMLInputElement | null;
+  if (lvlMinEl && lvlMaxEl) {
+    let lvlMin = parseInt(lvlMinEl.value, 10);
+    let lvlMax = parseInt(lvlMaxEl.value, 10);
+    if (lvlMin > lvlMax) [lvlMin, lvlMax] = [lvlMax, lvlMin];
+    filteredData = filteredData.filter(c => c.level >= lvlMin && c.level <= lvlMax);
+  }
+
+  // Kategorie-Filter: bestimmt totalWealth + Anzeige
+  const activeCats = getActiveCategories();
+  filteredData = filteredData.map(c => {
+    const filteredTotal =
+      (activeCats.has('money')      ? c.money      : 0) +
+      (activeCats.has('companies')  ? c.companies  : 0) +
+      (activeCats.has('items')      ? c.items      : 0) +
+      (activeCats.has('equipments') ? c.equipments : 0) +
+      (activeCats.has('weapons')    ? c.weapons    : 0);
+    return { ...c, totalWealth: filteredTotal };
+  });
+
   filteredData.sort((a, b) => {
     const d = a[sortKey] - b[sortKey];
     return sortAsc ? d : -d;
@@ -388,9 +410,18 @@ function renderData() {
   scanTextEl.innerText = `Anzeige: ${filteredData.length.toLocaleString('de-DE')} von ${allCitizensData.length.toLocaleString('de-DE')} Bürgern.`;
 
   drawHistogram(filteredData);
-  drawCompositionChart(filteredData);
+  drawCompositionChart(filteredData, activeCats);
   chartSection.classList.remove('hidden');
-  applyColumnVisibility();
+  applyCategoryVisibility();
+}
+
+function getActiveCategories(): Set<string> {
+  const set = new Set<string>();
+  document.querySelectorAll('.cat-toggle').forEach(cb => {
+    const i = cb as HTMLInputElement;
+    if (i.checked) set.add(i.dataset.cat!);
+  });
+  return set;
 }
 
 document.getElementById('activity-filter')?.addEventListener('change', () => {
@@ -409,21 +440,42 @@ function attachSortListeners() {
 }
 attachSortListeners();
 
-// ---- COLUMN VISIBILITY ----
-function applyColumnVisibility() {
-  document.querySelectorAll('.col-toggle').forEach(cb => {
-    const input = cb as HTMLInputElement;
-    const col = input.dataset.col!;
-    document.querySelectorAll(`.col-${col}`).forEach(el => {
-      (el as HTMLElement).style.display = input.checked ? '' : 'none';
+// ---- CATEGORY VISIBILITY (Tabellen-Spalten) ----
+function applyCategoryVisibility() {
+  document.querySelectorAll('.cat-toggle').forEach(cb => {
+    const i = cb as HTMLInputElement;
+    document.querySelectorAll(`.col-${i.dataset.cat}`).forEach(el => {
+      (el as HTMLElement).style.display = i.checked ? '' : 'none';
     });
   });
 }
-document.querySelectorAll('.col-toggle').forEach(cb => {
-  cb.addEventListener('change', applyColumnVisibility);
+document.querySelectorAll('.cat-toggle').forEach(cb => {
+  cb.addEventListener('change', () => {
+    if (allCitizensData.length > 0) renderData();
+    else applyCategoryVisibility();
+  });
 });
 
-function drawCompositionChart(data: CitizenData[]) {
+// ---- LEVEL-RANGE-SLIDER ----
+const levelMinSlider = document.getElementById('levelMin') as HTMLInputElement | null;
+const levelMaxSlider = document.getElementById('levelMax') as HTMLInputElement | null;
+const levelRangeLabel = document.getElementById('levelRangeLabel');
+function syncLevelLabel() {
+  if (!levelMinSlider || !levelMaxSlider || !levelRangeLabel) return;
+  let min = parseInt(levelMinSlider.value, 10);
+  let max = parseInt(levelMaxSlider.value, 10);
+  if (min > max) [min, max] = [max, min];
+  levelRangeLabel.textContent = `${min} – ${max}`;
+}
+[levelMinSlider, levelMaxSlider].forEach(s => {
+  s?.addEventListener('input', () => {
+    syncLevelLabel();
+    if (allCitizensData.length > 0) renderData();
+  });
+});
+syncLevelLabel();
+
+function drawCompositionChart(data: CitizenData[], activeCats: Set<string>) {
   const tiers = [
     { label: 'Level 1-9',   min: 1,  max: 9   },
     { label: 'Level 10-19', min: 10, max: 19  },
@@ -439,7 +491,7 @@ function drawCompositionChart(data: CitizenData[]) {
     { key: 'weapons',    label: 'Waffen',     color: 'rgba(248,81,73,0.8)'  },
   ];
 
-  const datasets = categories.map(cat => ({
+  const datasets = categories.filter(cat => activeCats.has(cat.key)).map(cat => ({
     label: cat.label,
     backgroundColor: cat.color,
     data: tiers.map(tier =>
