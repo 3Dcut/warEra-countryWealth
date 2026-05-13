@@ -726,11 +726,13 @@ async function scanCountryCitizens(
   while (true) {
     const usersRes: any = await api.getUsersByCountry(countryId, cursor);
     const data = usersRes?.result?.data || usersRes;
+    if (!cursor) console.log('[getUsersByCountry] first page raw:', usersRes, 'keys:', Object.keys(data || {}), 'items[0] keys:', data?.items?.[0] ? Object.keys(data.items[0]) : null);
     if (!data?.items) break;
     citizens = citizens.concat(data.items);
     cursor = data.nextCursor;
     if (!cursor) break;
   }
+  console.log('[scanCountryCitizens] total citizens from API for', countryId, '=', citizens.length);
 
   // Parallel-Pool: API-Wrapper drosselt automatisch bei 429 via Key-Rotation/Retry.
   const CONCURRENCY = 8;
