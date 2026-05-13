@@ -866,6 +866,18 @@ function renderComparison() {
   const leftFiltered  = applySharedFilters(leftGroup.citizens);
   const rightFiltered = applySharedFilters(rightGroup.citizens);
   console.log('[renderComparison] activeCats=', [...activeCats], 'left raw=', leftGroup.citizens.length, '→filtered=', leftFiltered.length, 'right raw=', rightGroup.citizens.length, '→filtered=', rightFiltered.length);
+  // Diagnose: Activity-Felder erster Bürger
+  if (leftGroup.citizens.length > 0) {
+    console.log('[renderComparison] left sample (5):', leftGroup.citizens.slice(0, 5).map(c => ({ user: c.username, lvl: c.level, diffDays: c.diffDays, diffHours: c.diffHours, lastConn: c.lastConnectionAt })));
+    const buckets = { active7d: 0, inactive: 0, unknown: 0, future: 0 };
+    leftGroup.citizens.forEach(c => {
+      if (c.diffDays < 0) buckets.future++;
+      else if (!c.lastConnectionAt) buckets.unknown++;
+      else if (c.diffDays > 7) buckets.inactive++;
+      else buckets.active7d++;
+    });
+    console.log('[renderComparison] left buckets:', buckets);
+  }
   const leftAgg  = aggregateGroup(leftFiltered, activeCats);
   const rightAgg = aggregateGroup(rightFiltered, activeCats);
 
