@@ -41,7 +41,7 @@ let api: WarEraAPI;
 let isScanning = false;
 let countries: any[] = [];
 let wealthChart: Chart | null = null;
-let compositionChart: Chart | null = null;
+let levelDistChart: Chart | null = null;
 
 // ---- Country-Cache (24h) ----
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -239,7 +239,7 @@ async function runSingleScan(forceRefresh: boolean) {
   resultsBody.innerHTML = '';
   chartSection.classList.add('hidden');
   if (wealthChart) wealthChart.destroy();
-  if (compositionChart) compositionChart.destroy();
+  if (levelDistChart) levelDistChart.destroy();
   allCitizensData = [];
 
   scanProgressEl.style.width = '0%';
@@ -375,7 +375,7 @@ function renderData() {
   scanTextEl.innerText = `Anzeige: ${filteredData.length.toLocaleString('de-DE')} von ${allCitizensData.length.toLocaleString('de-DE')} Bürgern.`;
 
   drawHistogram(filteredData);
-  drawCompositionChart(filteredData, activeCats);
+  drawLevelDistChart(filteredData);
   chartSection.classList.remove('hidden');
   applyCategoryVisibility();
 }
@@ -443,54 +443,58 @@ function syncLevelLabel() {
 });
 syncLevelLabel();
 
-function drawCompositionChart(data: CitizenData[], activeCats: Set<string>) {
-  const tiers = [
-    { label: 'Level 1-9',   min: 1,  max: 9   },
-    { label: 'Level 10-19', min: 10, max: 19  },
-    { label: 'Level 20-29', min: 20, max: 29  },
-    { label: 'Level 30+',   min: 30, max: 999 },
-  ];
+function drawLevelDistChart(data: CitizenData[]) {
+  if (!data.length) return;
 
-  const categories: { key: keyof Pick<CitizenData, 'money'|'companies'|'items'|'equipments'|'weapons'>; label: string; color: string }[] = [
-    { key: 'money',      label: 'Bargeld',    color: 'rgba(63,185,80,0.8)'  },
-    { key: 'companies',  label: 'Firmen',     color: 'rgba(88,166,255,0.8)' },
-    { key: 'items',      label: 'Items',      color: 'rgba(168,85,247,0.8)' },
-    { key: 'equipments', label: 'Ausrüstung', color: 'rgba(234,179,8,0.8)'  },
-    { key: 'weapons',    label: 'Waffen',     color: 'rgba(248,81,73,0.8)'  },
-  ];
-
-  const datasets = categories.filter(cat => activeCats.has(cat.key)).map(cat => ({
-    label: cat.label,
-    backgroundColor: cat.color,
-    data: tiers.map(tier =>
-      data.filter(c => c.level >= tier.min && c.level <= tier.max)
-          .reduce((sum, c) => sum + c[cat.key], 0)
-    ),
-  }));
+  const maxLevel = Math.max(...data.map(c => c.level));
+  const minLevel = Math.min(...data.map(c => c.level));
+  const counts: number[] = new Array(maxLevel - minLevel + 1).fill(0);
+  for (const c of data) counts[c.level - minLevel]++;
+  const labels = Array.from({ length: maxLevel - minLevel + 1 }, (_, i) => String(i + minLevel));
 
   const ctx2 = (document.getElementById('compositionChart') as HTMLCanvasElement).getContext('2d');
   if (!ctx2) return;
-  if (compositionChart) compositionChart.destroy();
+  if (levelDistChart) levelDistChart.destroy();
 
-  compositionChart = new Chart(ctx2, {
+  levelDistChart = new Chart(ctx2, {
     type: 'bar',
-    data: { labels: tiers.map(t => t.label), datasets },
+    data: {
+      labels,
+      datasets: [{
+        label: 'Anzahl Bürger',
+        data: counts,
+        backgroundColor: 'rgba(88,166,255,0.7)',
+        borderColor: 'rgba(88,166,255,1)',
+        borderWidth: 1,
+        borderRadius: 2,
+        barPercentage: 1.0,
+        categoryPercentage: 1.0,
+      }],
+    },
     options: {
-      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: true, labels: { color: '#94a3b8' } },
+        legend: { display: false },
         title: {
           display: true,
-          text: 'Vermögenszusammensetzung nach Level-Tier',
+          text: 'Levelverteilung der Bürger',
           color: '#e2e8f0',
           font: { family: 'Inter', size: 16 },
         },
       },
       scales: {
-        x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: {
+          title: { display: true, text: 'Level', color: '#94a3b8' },
+          ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, maxTicksLimit: 20 },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+        y: {
+          title: { display: true, text: 'Anzahl', color: '#94a3b8' },
+          ticks: { color: '#94a3b8', precision: 0 },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          beginAtZero: true,
+        },
       },
     },
   });
